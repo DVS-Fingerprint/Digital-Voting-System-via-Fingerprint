@@ -1,0 +1,8 @@
+<h1>Active Elections</h1>
+<ul>
+  {% for election in elections %}
+    <li><a href="{% url 'voting:election' election.id %}">{{ election.title }}</a></li>
+  {% empty %}
+    <li>No active elections.</li>
+  {% endfor %}
+</ul>
