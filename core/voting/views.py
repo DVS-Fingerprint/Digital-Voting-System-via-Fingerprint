@@ -2,6 +2,7 @@ from django.shortcuts import render, get_object_or_404, redirect
 from .models import Election, Candidate, Voter, Vote
 from django.utils import timezone
 from django.http import HttpResponse
+from django.contrib.admin.views.decorators import staff_member_required
 
 def home(request):
     elections = Election.objects.filter(is_active=True)
@@ -28,3 +29,17 @@ def vote(request, candidate_id):
     voter.save()
 
     return HttpResponse(f"Thanks for voting for {candidate.name}!")
+
+def live_results(request):
+    candidates = Candidate.objects.all()
+    return render(request, 'results.html', {'candidates': candidates})
+
+@staff_member_required
+def admin_dashboard(request):
+    context = {
+        'total_voters': Voter.objects.count(),
+        'total_candidates': Candidate.objects.count(),
+        'total_votes': Vote.objects.count(),
+        'candidates': Candidate.objects.all(),
+    }
+    return render(request, 'dashboard.html', context)
