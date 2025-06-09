@@ -1,9 +1,11 @@
 from django.shortcuts import render, get_object_or_404, redirect
 from .models import Election, Candidate, Voter, Vote
 from django.utils import timezone
-from django.http import HttpResponse
+from django.http import HttpResponse,HttpResponseRedirect
 from django.contrib.admin.views.decorators import staff_member_required
 from django.db.models import Count
+from .forms import VoterRegistrationForm
+from django.shortcuts import render, redirect
 
 def home(request):
     elections = Election.objects.filter(is_active=True)
@@ -35,6 +37,16 @@ def live_results(request):
     candidates = Candidate.objects.all()
     return render(request, 'results.html', {'candidates': candidates})
 
+def register_voter(request):
+    if request.method == 'POST':
+        form = VoterRegistrationForm(request.POST)
+        if form.is_valid():
+            form.save()
+            return redirect('dashboard')  # or a confirmation page
+    else:
+        form = VoterRegistrationForm()
+    return render(request, 'voting/register_voter.html', {'form': form})
+   
 @staff_member_required
 def admin_dashboard(request):
     total_voters = Voter.objects.count()

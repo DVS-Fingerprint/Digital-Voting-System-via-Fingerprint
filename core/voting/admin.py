@@ -6,4 +6,4 @@ from .models import Voter, Candidate, Vote, Election
 admin.site.register(Voter)
 admin.site.register(Candidate)
 admin.site.register(Vote)
-admin.site.register(Election)
+

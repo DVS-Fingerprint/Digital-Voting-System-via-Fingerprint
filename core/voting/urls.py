@@ -9,4 +9,7 @@ urlpatterns = [
     path('vote/<int:candidate_id>/', views.vote, name='vote'),  # Vote for candidate
     path('results/', views.live_results, name='results'),
     path('dashboard/', views.admin_dashboard, name='admin_dashboard'),
+    path('register-voter/', views.register_voter, name='register_voter'),
+    
+
 ]
