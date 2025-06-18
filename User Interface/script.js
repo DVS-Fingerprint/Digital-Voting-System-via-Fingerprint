@@ -6,14 +6,47 @@ let sessionTimeout = 60000; // 1 minute
 let candidates = [];
 let votes = [];
 let activityLogs = [];
+let voterVotes = {}; // Track votes per voter per post
 
-// Sample Data
+// Sample Data with multiple posts
+const samplePosts = [
+    {
+        id: 'president',
+        name: 'President',
+        nameNp: 'अध्यक्ष',
+        description: 'Student Council President',
+        descriptionNp: 'विद्यार्थी परिषद अध्यक्ष'
+    },
+    {
+        id: 'vice_president',
+        name: 'Vice President',
+        nameNp: 'उपाध्यक्ष',
+        description: 'Student Council Vice President',
+        descriptionNp: 'विद्यार्थी परिषद उपाध्यक्ष'
+    },
+    {
+        id: 'secretary',
+        name: 'Secretary',
+        nameNp: 'सचिव',
+        description: 'Student Council Secretary',
+        descriptionNp: 'विद्यार्थी परिषद सचिव'
+    },
+    {
+        id: 'treasurer',
+        name: 'Treasurer',
+        nameNp: 'कोषाध्यक्ष',
+        description: 'Student Council Treasurer',
+        descriptionNp: 'विद्यार्थी परिषद कोषाध्यक्ष'
+    }
+];
+
 const sampleCandidates = [
     {
         id: 1,
         name: "John Smith",
         party: "Student Progressive Party",
         photo: "👨‍🎓",
+        post: "president",
         manifesto: "I believe in creating an inclusive environment where every student's voice is heard. My focus will be on improving campus facilities, enhancing academic support, and fostering a strong community spirit.",
         achievements: [
             "Class Representative for 2 years",
@@ -27,6 +60,7 @@ const sampleCandidates = [
         name: "Sarah Johnson",
         party: "Future Leaders Alliance",
         photo: "👩‍🎓",
+        post: "president",
         manifesto: "My vision is to modernize our student council with innovative ideas and digital solutions. I will work towards better communication channels, enhanced career guidance, and improved student welfare programs.",
         achievements: [
             "Vice President of Computer Science Club",
@@ -40,6 +74,7 @@ const sampleCandidates = [
         name: "Michael Chen",
         party: "Unity Student Movement",
         photo: "👨‍💼",
+        post: "president",
         manifesto: "I stand for unity and collaboration among all departments. My goals include bridging gaps between different student groups, promoting cultural diversity, and creating opportunities for cross-disciplinary learning.",
         achievements: [
             "President of International Students Association",
@@ -47,13 +82,97 @@ const sampleCandidates = [
             "Represented college in Model UN",
             "Published 2 research papers"
         ]
+    },
+    {
+        id: 4,
+        name: "Emily Davis",
+        party: "Student Progressive Party",
+        photo: "👩‍💼",
+        post: "vice_president",
+        manifesto: "I will work closely with the president to ensure smooth operations and represent student interests effectively.",
+        achievements: [
+            "Class Representative for 1 year",
+            "Organized 3 campus events",
+            "Member of debate team",
+            "Maintained 3.7 GPA"
+        ]
+    },
+    {
+        id: 5,
+        name: "David Wilson",
+        party: "Future Leaders Alliance",
+        photo: "👨‍🎓",
+        post: "vice_president",
+        manifesto: "My focus will be on supporting the president's vision while bringing fresh perspectives to student governance.",
+        achievements: [
+            "Vice President of Science Club",
+            "Won Best Student Award 2023",
+            "Coordinated 2 major workshops",
+            "Published 1 research paper"
+        ]
+    },
+    {
+        id: 6,
+        name: "Lisa Brown",
+        party: "Unity Student Movement",
+        photo: "👩‍💼",
+        post: "secretary",
+        manifesto: "I will ensure transparent communication and maintain accurate records of all council activities.",
+        achievements: [
+            "Secretary of Literature Club",
+            "Excellent record keeping skills",
+            "Organized 4 successful events",
+            "Maintained 3.9 GPA"
+        ]
+    },
+    {
+        id: 7,
+        name: "Robert Taylor",
+        party: "Student Progressive Party",
+        photo: "👨‍💼",
+        post: "secretary",
+        manifesto: "I will maintain clear documentation and ensure all students are informed about council decisions.",
+        achievements: [
+            "Class Secretary for 2 years",
+            "Excellent communication skills",
+            "Led 3 successful campaigns",
+            "Maintained 3.6 GPA"
+        ]
+    },
+    {
+        id: 8,
+        name: "Maria Garcia",
+        party: "Future Leaders Alliance",
+        photo: "👩‍🎓",
+        post: "treasurer",
+        manifesto: "I will ensure transparent financial management and responsible allocation of student funds.",
+        achievements: [
+            "Treasurer of Finance Club",
+            "Excellent financial management skills",
+            "Organized 2 fundraising events",
+            "Maintained 3.8 GPA"
+        ]
+    },
+    {
+        id: 9,
+        name: "James Anderson",
+        party: "Unity Student Movement",
+        photo: "👨‍💼",
+        post: "treasurer",
+        manifesto: "I will maintain accurate financial records and ensure proper use of student council funds.",
+        achievements: [
+            "Treasurer of Economics Club",
+            "Strong accounting background",
+            "Managed 3 club budgets",
+            "Maintained 3.7 GPA"
+        ]
     }
 ];
 
 const sampleVoters = [
-    { id: 1, name: "John Doe", fingerprint: "finger1", hasVoted: false },
-    { id: 2, name: "Jane Smith", fingerprint: "finger2", hasVoted: true },
-    { id: 3, name: "Bob Wilson", fingerprint: "finger3", hasVoted: false }
+    { id: 1, name: "John Doe", fingerprint: "finger1", hasVoted: {} },
+    { id: 2, name: "Jane Smith", fingerprint: "finger2", hasVoted: {} },
+    { id: 3, name: "Bob Wilson", fingerprint: "finger3", hasVoted: {} }
 ];
 
 // Initialize the application
@@ -291,63 +410,225 @@ function authenticateVoter(voter) {
 
 // Dashboard Management
 function loadDashboard() {
-    if (!currentVoter) return;
-    
-    console.log('Loading dashboard for:', currentVoter.name);
+    console.log('Loading dashboard for voter:', currentVoter.name);
     
     // Update voter info
-    const voterName = document.getElementById('voterName');
-    if (voterName) {
-        voterName.textContent = currentVoter.name;
+    document.getElementById('voterName').textContent = currentVoter.name;
+    
+    // Initialize voter votes if not exists
+    if (!currentVoter.hasVoted) {
+        currentVoter.hasVoted = {};
     }
     
-    // Check if already voted
-    const alreadyVotedAlert = document.getElementById('alreadyVotedAlert');
-    if (alreadyVotedAlert) {
-        if (currentVoter.hasVoted) {
-            alreadyVotedAlert.style.display = 'flex';
-        } else {
-            alreadyVotedAlert.style.display = 'none';
-        }
-    }
-    
-    // Load candidates
-    loadCandidates();
+    // Load the main dashboard view
+    loadMainDashboard();
     
     // Start session timer
     startSessionTimer();
+    
+    // Log activity
+    addActivityLog(currentVoter.name, 'Login', 'Success');
+    
+    console.log('Dashboard loaded successfully');
 }
 
-function loadCandidates() {
-    const candidatesGrid = document.getElementById('candidatesGrid');
-    const candidatesInfo = document.getElementById('candidatesInfo');
+function loadMainDashboard() {
+    const voteTab = document.getElementById('voteTab');
+    const infoTab = document.getElementById('infoTab');
     
-    if (candidatesGrid) {
-        candidatesGrid.innerHTML = '';
-        candidates.forEach(candidate => {
-            const candidateCard = createCandidateCard(candidate);
-            candidatesGrid.appendChild(candidateCard);
-        });
+    // Clear existing content
+    voteTab.innerHTML = '';
+    infoTab.innerHTML = '';
+    
+    // Create main dashboard content
+    const dashboardContent = document.createElement('div');
+    dashboardContent.className = 'dashboard-main';
+    
+    // Create two main sections
+    const voteSection = document.createElement('div');
+    voteSection.className = 'dashboard-section';
+    voteSection.innerHTML = `
+        <div class="section-header">
+            <i class="fas fa-vote-yea"></i>
+            <h3 data-en="Cast Your Vote" data-np="आफ्नो मत दिनुहोस्">Cast Your Vote</h3>
+        </div>
+        <div class="posts-grid" id="postsGrid">
+            <!-- Posts will be populated here -->
+        </div>
+    `;
+    
+    const candidateListSection = document.createElement('div');
+    candidateListSection.className = 'dashboard-section';
+    candidateListSection.innerHTML = `
+        <div class="section-header">
+            <i class="fas fa-users"></i>
+            <h3 data-en="All Candidates" data-np="सबै उम्मेदवारहरू">All Candidates</h3>
+        </div>
+        <div class="candidates-overview" id="candidatesOverview">
+            <!-- All candidates will be shown here -->
+        </div>
+    `;
+    
+    voteTab.appendChild(voteSection);
+    infoTab.appendChild(candidateListSection);
+    
+    // Load posts and candidates
+    loadPosts();
+    loadAllCandidates();
+}
+
+function loadPosts() {
+    const postsGrid = document.getElementById('postsGrid');
+    if (!postsGrid) return;
+    
+    postsGrid.innerHTML = '';
+    
+    samplePosts.forEach(post => {
+        const postCard = document.createElement('div');
+        postCard.className = 'post-card';
+        
+        const hasVoted = currentVoter.hasVoted[post.id];
+        const isVoted = hasVoted ? 'voted' : '';
+        
+        postCard.innerHTML = `
+            <div class="post-icon">
+                <i class="fas fa-user-tie"></i>
+            </div>
+            <div class="post-info">
+                <h4 data-en="${post.name}" data-np="${post.nameNp}">${post.name}</h4>
+                <p data-en="${post.description}" data-np="${post.descriptionNp}">${post.description}</p>
+            </div>
+            <div class="post-status ${isVoted}">
+                ${hasVoted ? 
+                    '<i class="fas fa-check-circle"></i><span data-en="Voted" data-np="मत दिएको">Voted</span>' : 
+                    '<i class="fas fa-arrow-right"></i><span data-en="Vote Now" data-np="अहिले मत दिनुहोस्">Vote Now</span>'
+                }
+            </div>
+        `;
+        
+        if (!hasVoted) {
+            postCard.addEventListener('click', () => showCandidatesForPost(post));
+            postCard.style.cursor = 'pointer';
+        }
+        
+        postsGrid.appendChild(postCard);
+    });
+    
+    updateLanguage();
+}
+
+function loadAllCandidates() {
+    const candidatesOverview = document.getElementById('candidatesOverview');
+    if (!candidatesOverview) return;
+    
+    candidatesOverview.innerHTML = '';
+    
+    // Group candidates by post
+    const candidatesByPost = {};
+    sampleCandidates.forEach(candidate => {
+        if (!candidatesByPost[candidate.post]) {
+            candidatesByPost[candidate.post] = [];
+        }
+        candidatesByPost[candidate.post].push(candidate);
+    });
+    
+    // Create sections for each post
+    samplePosts.forEach(post => {
+        const postCandidates = candidatesByPost[post.id] || [];
+        
+        const postSection = document.createElement('div');
+        postSection.className = 'post-candidates-section';
+        postSection.innerHTML = `
+            <h4 data-en="${post.name}" data-np="${post.nameNp}">${post.name}</h4>
+            <div class="candidates-mini-grid">
+                ${postCandidates.map(candidate => `
+                    <div class="candidate-mini-card">
+                        <div class="candidate-photo">${candidate.photo}</div>
+                        <div class="candidate-info">
+                            <h5>${candidate.name}</h5>
+                            <p>${candidate.party}</p>
+                        </div>
+                    </div>
+                `).join('')}
+            </div>
+        `;
+        
+        candidatesOverview.appendChild(postSection);
+    });
+    
+    updateLanguage();
+}
+
+function showCandidatesForPost(post) {
+    console.log('Showing candidates for post:', post.name);
+    
+    const voteTab = document.getElementById('voteTab');
+    voteTab.innerHTML = '';
+    
+    // Create back button and header
+    const header = document.createElement('div');
+    header.className = 'candidates-header';
+    header.innerHTML = `
+        <button class="back-btn" onclick="loadMainDashboard()">
+            <i class="fas fa-arrow-left"></i>
+            <span data-en="Back to Posts" data-np="पदहरूमा फिर्ता">Back to Posts</span>
+        </button>
+        <h3 data-en="Candidates for ${post.name}" data-np="${post.nameNp} का लागि उम्मेदवारहरू">Candidates for ${post.name}</h3>
+    `;
+    
+    const candidatesContainer = document.createElement('div');
+    candidatesContainer.className = 'candidates-container';
+    candidatesContainer.id = 'candidatesContainer';
+    
+    voteTab.appendChild(header);
+    voteTab.appendChild(candidatesContainer);
+    
+    // Load candidates for this specific post
+    loadCandidatesForPost(post.id);
+    
+    updateLanguage();
+}
+
+function loadCandidatesForPost(postId) {
+    const candidatesContainer = document.getElementById('candidatesContainer');
+    if (!candidatesContainer) return;
+    
+    const postCandidates = sampleCandidates.filter(candidate => candidate.post === postId);
+    
+    if (postCandidates.length === 0) {
+        candidatesContainer.innerHTML = `
+            <div class="no-candidates">
+                <i class="fas fa-exclamation-triangle"></i>
+                <p data-en="No candidates found for this position" data-np="यो पदको लागि कुनै उम्मेदवार फेला परेनन्">No candidates found for this position</p>
+            </div>
+        `;
+        return;
     }
     
-    if (candidatesInfo) {
-        candidatesInfo.innerHTML = '';
-        candidates.forEach(candidate => {
-            const candidateInfoCard = createCandidateInfoCard(candidate);
-            candidatesInfo.appendChild(candidateInfoCard);
-        });
-    }
+    const candidatesGrid = document.createElement('div');
+    candidatesGrid.className = 'candidates-grid';
+    
+    postCandidates.forEach(candidate => {
+        const candidateCard = createCandidateCard(candidate);
+        candidatesGrid.appendChild(candidateCard);
+    });
+    
+    candidatesContainer.appendChild(candidatesGrid);
 }
 
 function createCandidateCard(candidate) {
     const card = document.createElement('div');
     card.className = 'candidate-card';
+    
+    // Check if voter has already voted for this post
+    const hasVotedForPost = currentVoter.hasVoted[candidate.post];
+    
     card.innerHTML = `
         <div class="candidate-photo">${candidate.photo}</div>
         <h3 class="candidate-name">${candidate.name}</h3>
         <p class="candidate-party">${candidate.party}</p>
-        <button class="vote-btn" onclick="selectCandidate(${candidate.id})" ${currentVoter && currentVoter.hasVoted ? 'disabled' : ''}>
-            ${currentVoter && currentVoter.hasVoted ? 'Already Voted' : 'Vote'}
+        <button class="vote-btn" onclick="selectCandidate(${candidate.id})" ${hasVotedForPost ? 'disabled' : ''}>
+            ${hasVotedForPost ? 'Already Voted' : 'Vote'}
         </button>
     `;
     return card;
@@ -378,80 +659,107 @@ function createCandidateInfoCard(candidate) {
     return card;
 }
 
-// Voting Process
 function selectCandidate(candidateId) {
-    const candidate = candidates.find(c => c.id === candidateId);
-    if (!candidate) return;
+    console.log('Selecting candidate:', candidateId);
     
-    console.log('Selected candidate:', candidate.name);
+    const candidate = sampleCandidates.find(c => c.id === candidateId);
+    if (!candidate) {
+        console.error('Candidate not found');
+        return;
+    }
+    
+    // Check if already voted for this post
+    if (currentVoter.hasVoted[candidate.post]) {
+        showToast('You have already voted for this position', 'warning');
+        return;
+    }
     
     // Show confirmation modal
-    const confirmCandidateImg = document.getElementById('confirmCandidateImg');
-    const confirmCandidateName = document.getElementById('confirmCandidateName');
-    const confirmCandidateParty = document.getElementById('confirmCandidateParty');
-    
-    if (confirmCandidateImg) confirmCandidateImg.innerHTML = candidate.photo;
-    if (confirmCandidateName) confirmCandidateName.textContent = candidate.name;
-    if (confirmCandidateParty) confirmCandidateParty.textContent = candidate.party;
-    
     const modal = document.getElementById('confirmationModal');
-    if (modal) {
-        modal.classList.add('active');
-    }
+    const confirmImg = document.getElementById('confirmCandidateImg');
+    const confirmName = document.getElementById('confirmCandidateName');
+    const confirmParty = document.getElementById('confirmCandidateParty');
+    
+    if (confirmImg) confirmImg.textContent = candidate.photo;
+    if (confirmName) confirmName.textContent = candidate.name;
+    if (confirmParty) confirmParty.textContent = candidate.party;
+    
+    // Store selected candidate for confirmation
+    window.selectedCandidate = candidate;
+    
+    modal.style.display = 'flex';
 }
 
 function confirmVoteFunction() {
-    const candidateName = document.getElementById('confirmCandidateName').textContent;
-    const candidate = candidates.find(c => c.name === candidateName);
+    console.log('Confirming vote...');
     
-    if (candidate) {
-        // Record vote
-        const existingVote = votes.find(v => v.candidateId === candidate.id);
-        if (existingVote) {
-            existingVote.count++;
-        } else {
-            votes.push({ candidateId: candidate.id, count: 1 });
-        }
-        
-        // Mark voter as voted
-        if (currentVoter) {
-            currentVoter.hasVoted = true;
-        }
-        
-        // Add activity log
-        if (currentVoter) {
-            addActivityLog(currentVoter.name, 'Vote Cast', 'Success');
-        }
-        
-        // Show success message
-        showToast('Vote cast successfully!', 'success');
-        
-        // Close modal
-        closeModalFunction();
-        
-        // Show thank you page
-        setTimeout(() => {
-            showThankYouPage(candidate);
-        }, 1000);
+    if (!window.selectedCandidate) {
+        console.error('No candidate selected');
+        return;
     }
+    
+    const candidate = window.selectedCandidate;
+    
+    // Record the vote
+    currentVoter.hasVoted[candidate.post] = {
+        candidateId: candidate.id,
+        candidateName: candidate.name,
+        timestamp: new Date().toISOString()
+    };
+    
+    // Update vote count
+    const existingVote = votes.find(v => v.candidateId === candidate.id);
+    if (existingVote) {
+        existingVote.count++;
+    } else {
+        votes.push({ candidateId: candidate.id, count: 1 });
+    }
+    
+    // Log activity
+    addActivityLog(currentVoter.name, `Vote Cast for ${candidate.post}`, 'Success');
+    
+    // Close modal
+    closeModalFunction();
+    
+    // Show thank you page
+    showThankYouPage(candidate);
+    
+    console.log('Vote confirmed successfully');
 }
 
 function showThankYouPage(candidate) {
-    const summaryPosition = document.getElementById('summaryPosition');
-    const summaryCandidate = document.getElementById('summaryCandidate');
-    const summaryTime = document.getElementById('summaryTime');
+    console.log('Showing thank you page');
     
-    if (summaryPosition) summaryPosition.textContent = 'Student Council President';
-    if (summaryCandidate) summaryCandidate.textContent = candidate.name;
-    if (summaryTime) summaryTime.textContent = new Date().toLocaleTimeString();
+    // Update thank you page content
+    const thankYouPage = document.getElementById('thankYouPage');
+    const summaryItem = thankYouPage.querySelector('.summary-item');
+    
+    if (summaryItem) {
+        summaryItem.innerHTML = `
+            <div class="summary-candidate">
+                <div class="summary-photo">${candidate.photo}</div>
+                <div class="summary-details">
+                    <h4>${candidate.name}</h4>
+                    <p>${candidate.party}</p>
+                    <span class="summary-position">${samplePosts.find(p => p.id === candidate.post)?.name || candidate.post}</span>
+                </div>
+            </div>
+        `;
+    }
     
     showPage('thankYouPage');
+    
+    // Auto redirect to dashboard after 5 seconds
+    setTimeout(() => {
+        showPage('dashboardPage');
+        loadMainDashboard();
+    }, 5000);
 }
 
 function closeModalFunction() {
     const modal = document.getElementById('confirmationModal');
     if (modal) {
-        modal.classList.remove('active');
+        modal.style.display = 'none';
     }
 }
 

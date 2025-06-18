@@ -105,18 +105,13 @@
                     </div>
                     <div class="voter-details">
                         <h2 id="voterName">John Doe</h2>
-                        <p id="voterPost" data-en="Voting for: Student Council President" data-np="मतदान: विद्यार्थी परिषद अध्यक्ष">Voting for: Student Council President</p>
+                        <p data-en="Welcome to the voting system" data-np="मतदान प्रणालीमा स्वागत छ">Welcome to the voting system</p>
                     </div>
                 </div>
                 <div class="session-timer">
                     <i class="fas fa-clock"></i>
                     <span id="timer">01:00</span>
                 </div>
-            </div>
-
-            <div id="alreadyVotedAlert" class="alert alert-warning" style="display: none;">
-                <i class="fas fa-exclamation-triangle"></i>
-                <span data-en="You have already voted for this position" data-np="तपाईंले यो पदको लागि पहिले नै मत दिनुभएको छ">You have already voted for this position</span>
             </div>
 
             <div class="tabs-container">
@@ -127,23 +122,19 @@
                     </button>
                     <button class="tab-btn" data-tab="info">
                         <i class="fas fa-info-circle"></i>
-                        <span data-en="Candidate Info" data-np="उम्मेदवार जानकारी">Candidate Info</span>
+                        <span data-en="Candidate List" data-np="उम्मेदवार सूची">Candidate List</span>
                     </button>
                 </div>
 
                 <div class="tab-content">
                     <!-- Vote Tab -->
                     <div id="voteTab" class="tab-panel active">
-                        <div class="candidates-grid" id="candidatesGrid">
-                            <!-- Candidates will be populated here -->
-                        </div>
+                        <!-- Content will be dynamically loaded -->
                     </div>
 
                     <!-- Candidate Info Tab -->
                     <div id="infoTab" class="tab-panel">
-                        <div class="candidates-info" id="candidatesInfo">
-                            <!-- Candidate details will be populated here -->
-                        </div>
+                        <!-- Content will be dynamically loaded -->
                     </div>
                 </div>
             </div>
@@ -166,7 +157,7 @@
             </div>
             <div class="modal-body">
                 <div class="candidate-confirmation">
-                    <img id="confirmCandidateImg" src="" alt="Candidate" class="confirm-candidate-img">
+                    <div id="confirmCandidateImg" class="confirm-candidate-img"></div>
                     <div class="confirm-details">
                         <h4 id="confirmCandidateName"></h4>
                         <p id="confirmCandidateParty"></p>
@@ -198,21 +189,12 @@
                 <div class="vote-summary">
                     <h3 data-en="Vote Summary" data-np="मतदान सारांश">Vote Summary</h3>
                     <div class="summary-item">
-                        <span data-en="Position:" data-np="पद:">Position:</span>
-                        <span id="summaryPosition">Student Council President</span>
-                    </div>
-                    <div class="summary-item">
-                        <span data-en="Candidate:" data-np="उम्मेदवार:">Candidate:</span>
-                        <span id="summaryCandidate">John Smith</span>
-                    </div>
-                    <div class="summary-item">
-                        <span data-en="Time:" data-np="समय:">Time:</span>
-                        <span id="summaryTime">12:30 PM</span>
+                        <!-- Summary content will be dynamically loaded -->
                     </div>
                 </div>
                 <button id="newVoteBtn" class="btn btn-primary">
                     <i class="fas fa-plus"></i>
-                    <span data-en="Vote for Another Position" data-np="अर्को पदको लागि मतदान">Vote for Another Position</span>
+                    <span data-en="Continue Voting" data-np="मतदान जारी राख्नुहोस्">Continue Voting</span>
                 </button>
             </div>
         </div>
