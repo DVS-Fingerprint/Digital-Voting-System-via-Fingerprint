@@ -1,8 +1,14 @@
-<h1>Active Elections</h1>
-<ul>
-  {% for election in elections %}
-    <li><a href="{% url 'voting:election' election.id %}">{{ election.title }}</a></li>
-  {% empty %}
-    <li>No active elections.</li>
-  {% endfor %}
-</ul>
+{% extends 'voting/base.html' %}
+{% block title %}Welcome | Digital Voting System{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-8 text-center">
+    <h1 class="mb-4">Welcome to the Digital Voting System</h1>
+    <p class="lead">Please scan your fingerprint at the voting booth to begin.</p>
+    <div class="my-4">
+      <i class="fas fa-fingerprint fa-5x text-primary"></i>
+    </div>
+    <p class="text-muted">Your identity will be verified using your fingerprint. Voting is secure and private.</p>
+  </div>
+</div>
+{% endblock %}

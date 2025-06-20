@@ -1,9 +1,33 @@
-{% extends 'base.html' %}
+{% extends 'voting/base.html' %}
+{% block title %}Register Voter | Digital Voting System{% endblock %}
 {% block content %}
-<h2>Register Voter</h2>
-<form method="post">
-    {% csrf_token %}
-    {{ form.as_p }}
-    <button type="submit">Register</button>
-</form>
+<div class="row justify-content-center">
+  <div class="col-md-6">
+    <div class="card mt-5">
+      <div class="card-header bg-primary text-white">
+        <h4 class="mb-0">Register Voter</h4>
+      </div>
+      <div class="card-body">
+        {% if success %}
+          <div class="alert alert-success">Voter registered successfully!</div>
+        {% endif %}
+        <form method="post" novalidate>
+          {% csrf_token %}
+          {{ form.non_field_errors }}
+          <div class="mb-3">
+            <label for="id_name" class="form-label">Full Name</label>
+            {{ form.name|as_widget(attrs={'class': 'form-control', 'placeholder': 'Full Name'}) }}
+            {{ form.name.errors }}
+          </div>
+          <div class="mb-3">
+            <label for="id_uid" class="form-label">Fingerprint UID</label>
+            {{ form.uid|as_widget(attrs={'class': 'form-control', 'placeholder': 'Fingerprint UID'}) }}
+            {{ form.uid.errors }}
+          </div>
+          <button type="submit" class="btn btn-success w-100">Register</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
 {% endblock %}

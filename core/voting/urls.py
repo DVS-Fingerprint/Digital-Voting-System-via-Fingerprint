@@ -4,12 +4,14 @@ from . import views
 app_name = 'voting'
 
 urlpatterns = [
-    path('', views.home, name='home'),                    # Homepage - list elections or welcome page
-    path('election/<int:election_id>/', views.election, name='election'),   # Show candidates & vote
-    path('vote/<int:candidate_id>/', views.vote, name='vote'),  # Vote for candidate
-    path('results/', views.live_results, name='results'),
-    path('dashboard/', views.admin_dashboard, name='admin_dashboard'),
+    path('', views.home, name='home'),
     path('register-voter/', views.register_voter, name='register_voter'),
-    
-
+    # API endpoints
+    path('api/authenticate_fingerprint/', views.authenticate_fingerprint, name='api_authenticate_fingerprint'),
+    path('api/posts/', views.posts_list, name='api_posts'),
+    path('api/candidates/', views.candidates_list, name='api_candidates'),
+    path('api/vote/', views.vote_view, name='api_vote'),
+    path('api/results/', views.results_view, name='api_results'),
+    path('api/register_candidate/', views.register_candidate, name='api_register_candidate'),
+    path('api/dashboard/', views.dashboard_view, name='api_dashboard'),
 ]
