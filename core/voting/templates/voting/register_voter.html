@@ -5,7 +5,12 @@
   <div class="col-md-6">
     <div class="card mt-5">
       <div class="card-header bg-primary text-white">
-        <h4 class="mb-0">Register Voter</h4>
+        <div class="d-flex justify-content-between align-items-center">
+          <h4 class="mb-0">Register Voter</h4>
+          <a href="{% url 'voting:admin_dashboard' %}" class="btn btn-light btn-sm">
+            <i class="fas fa-arrow-left"></i> Back to Dashboard
+          </a>
+        </div>
       </div>
       <div class="card-body">
         {% if success %}
@@ -15,13 +20,13 @@
           {% csrf_token %}
           {{ form.non_field_errors }}
           <div class="mb-3">
-            <label for="id_name" class="form-label">Full Name</label>
-            {{ form.name|as_widget(attrs={'class': 'form-control', 'placeholder': 'Full Name'}) }}
+            <label for="{{ form.name.id_for_label }}" class="form-label">Full Name</label>
+            {{ form.name }}
             {{ form.name.errors }}
           </div>
           <div class="mb-3">
-            <label for="id_uid" class="form-label">Fingerprint UID</label>
-            {{ form.uid|as_widget(attrs={'class': 'form-control', 'placeholder': 'Fingerprint UID'}) }}
+            <label for="{{ form.uid.id_for_label }}" class="form-label">Fingerprint UID</label>
+            {{ form.uid }}
             {{ form.uid.errors }}
           </div>
           <button type="submit" class="btn btn-success w-100">Register</button>

@@ -43,6 +43,7 @@ from rest_framework.permissions import IsAdminUser
 #     candidates = Candidate.objects.all()
 #     return render(request, 'results.html', {'candidates': candidates})
 
+@staff_member_required
 def register_voter(request):
     success = False
     if request.method == 'POST':
@@ -54,24 +55,21 @@ def register_voter(request):
     else:
         form = VoterRegistrationForm()
     return render(request, 'voting/register_voter.html', {'form': form, 'success': success})
-   
-# @staff_member_required
-# def admin_dashboard(request):
-#     total_voters = Voter.objects.count()
-#     total_candidates = Candidate.objects.count()
-#     total_votes = Vote.objects.count()
-#     # Optional: simulate live voting activity
-#     live_voting_activity = Vote.objects.order_by('-timestamp')[:15].count()
-#     # Vote counts by candidate
-#     vote_counts = Candidate.objects.annotate(num_votes=Count('vote')).order_by('-num_votes')
-#     context = {
-#         'total_voters': total_voters,
-#         'total_candidates': total_candidates,
-#         'total_votes': total_votes,
-#         'live_voting_activity': live_voting_activity,
-#         'vote_counts': vote_counts,
-#     }
-#     return render(request, 'voting/admin_dashboard.html', context)
+
+@staff_member_required
+def admin_dashboard(request):
+    total_voters = Voter.objects.count()
+    total_candidates = Candidate.objects.count()
+    total_votes = Vote.objects.count()
+    # Vote counts by candidate
+    vote_counts = Candidate.objects.annotate(num_votes=Count('vote')).order_by('-num_votes')
+    context = {
+        'total_voters': total_voters,
+        'total_candidates': total_candidates,
+        'total_votes': total_votes,
+        'vote_counts': vote_counts,
+    }
+    return render(request, 'voting/admin_dashboard.html', context)
 
 def home(request):
     return render(request, 'voting/home.html')

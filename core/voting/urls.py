@@ -6,6 +6,7 @@ app_name = 'voting'
 urlpatterns = [
     path('', views.home, name='home'),
     path('register-voter/', views.register_voter, name='register_voter'),
+    path('admin-dashboard/', views.admin_dashboard, name='admin_dashboard'),
     # API endpoints
     path('api/authenticate_fingerprint/', views.authenticate_fingerprint, name='api_authenticate_fingerprint'),
     path('api/posts/', views.posts_list, name='api_posts'),
