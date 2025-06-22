@@ -29,6 +29,7 @@ class Candidate(models.Model):
     name = models.CharField(max_length=100)
     photo = models.ImageField(upload_to='candidates/photos/', null=True, blank=True)
     symbol = models.ImageField(upload_to='candidates/symbols/', null=True, blank=True)
+    bio = models.TextField(max_length=500, blank=True, help_text="Brief biography of the candidate")
     post = models.ForeignKey(Post, on_delete=models.CASCADE, related_name='candidates')
 
     def __str__(self):

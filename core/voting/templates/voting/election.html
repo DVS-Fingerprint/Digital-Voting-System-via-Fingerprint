@@ -1,87 +1,343 @@
 {% extends 'voting/base.html' %}
 {% load i18n %}
-{% block title %}{% trans "Cast Your Vote" %}{% endblock %}
+{% block title %}Cast Your Vote | Digital Voting System{% endblock %}
 
 {% block content %}
-<div class="content-card dashboard-card">
-    <form id="voteForm" method="post" action="{% url 'voting:election_view' %}">
-        {% csrf_token %}
-        
-        <div class="d-flex justify-content-between align-items-center mb-4">
-            <h1 class="h3 mb-0">{% trans "Your Ballot" %}</h1>
-            <div>
-                <a href="{% url 'voting:voter_home' %}" class="btn btn-secondary-biomatdaan">{% trans "Cancel" %}</a>
-                <button type="submit" class="btn btn-primary-biomatdaan ms-2">{% trans "Submit Vote" %}</button>
-            </div>
+<div class="voting-container">
+    <!-- Progress Bar -->
+    <div class="progress-container mb-4">
+        <div class="progress" style="height: 8px;">
+            <div id="voting-progress" class="progress-bar bg-primary" role="progressbar" style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
         </div>
-        
-        <div id="form-error" class="alert alert-danger d-none"></div>
+        <div class="progress-text mt-2">
+            <small class="text-muted">Step <span id="current-step">1</span> of <span id="total-steps">{{ posts|length }}</span></small>
+        </div>
+    </div>
 
+    <!-- Voting Steps Container -->
+    <div id="voting-steps">
         {% for post in posts %}
-            <div class="mb-5">
-                <h4 class="post-title">{{ post.title }}</h4>
-                <div class="candidate-list" data-post-id="{{ post.id }}">
+        <div class="voting-step" data-step="{{ forloop.counter }}" data-post-id="{{ post.id }}" {% if not forloop.first %}style="display: none;"{% endif %}>
+            <div class="content-card dashboard-card">
+                <!-- Step Header -->
+                <div class="step-header text-center mb-4">
+                    <h2 class="h3 text-primary mb-2">{{ post.title }}</h2>
+                    <p class="text-muted">Select your preferred candidate for this position or skip if you don't want to vote</p>
+                </div>
+
+                <!-- Candidates Grid -->
+                <div class="candidates-grid">
                     {% for candidate in post.candidates.all %}
-                        <label class="candidate-card" for="candidate-{{ candidate.id }}">
-                            <input class="form-check-input d-none" type="radio" name="post_{{ post.id }}" id="candidate-{{ candidate.id }}" value="{{ candidate.id }}">
+                    <div class="candidate-card-voting" data-candidate-id="{{ candidate.id }}">
+                        <div class="candidate-header">
                             {% if candidate.photo %}
-                                <img src="{{ candidate.photo.url }}" alt="{{ candidate.name }}" class="photo">
+                                <img src="{{ candidate.photo.url }}" alt="{{ candidate.name }}" class="candidate-photo">
                             {% else %}
-                                <i class="fas fa-user-circle fa-3x text-secondary me-3"></i>
+                                <div class="candidate-photo-placeholder">
+                                    <i class="fas fa-user-circle"></i>
+                                </div>
                             {% endif %}
-                            <div class="candidate-info">
-                                {{ candidate.name }}
-                            </div>
                             {% if candidate.symbol %}
-                                <img src="{{ candidate.symbol.url }}" alt="Symbol" class="symbol">
+                                <img src="{{ candidate.symbol.url }}" alt="Symbol" class="candidate-symbol">
                             {% endif %}
-                        </label>
+                        </div>
+                        
+                        <div class="candidate-body">
+                            <h4 class="candidate-name">{{ candidate.name }}</h4>
+                            {% if candidate.bio %}
+                                <p class="candidate-bio">{{ candidate.bio }}</p>
+                            {% else %}
+                                <p class="candidate-bio text-muted">No biography available</p>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="candidate-actions">
+                            <button type="button" class="btn btn-outline-primary btn-vote" data-post-id="{{ post.id }}" data-candidate-id="{{ candidate.id }}">
+                                <i class="fas fa-vote-yea me-2"></i>Vote
+                            </button>
+                        </div>
+                    </div>
+                    {% empty %}
+                    <div class="no-candidates">
+                        <i class="fas fa-exclamation-triangle fa-3x text-warning mb-3"></i>
+                        <h5>No candidates available for this position</h5>
+                        <p class="text-muted">Please contact the administrator</p>
+                    </div>
                     {% endfor %}
                 </div>
+
+                <!-- Navigation Buttons -->
+                <div class="step-navigation mt-4">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <button type="button" class="btn btn-secondary btn-prev" {% if forloop.first %}style="visibility: hidden;"{% endif %}>
+                            <i class="fas fa-arrow-left me-2"></i>Previous
+                        </button>
+                        
+                        <div class="step-indicator">
+                            <span class="badge bg-primary">{{ forloop.counter }}</span>
+                            <span class="ms-2">{{ post.title }}</span>
+                        </div>
+                        
+                        <div class="step-actions">
+                            {% if forloop.last %}
+                                <button type="button" class="btn btn-success btn-submit">
+                                    <i class="fas fa-check me-2"></i>Submit Vote
+                                </button>
+                            {% else %}
+                                <button type="button" class="btn btn-warning btn-skip me-2">
+                                    <i class="fas fa-forward me-2"></i>Skip
+                                </button>
+                                <button type="button" class="btn btn-primary btn-next">
+                                    Next<i class="fas fa-arrow-right ms-2"></i>
+                                </button>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
             </div>
+        </div>
         {% endfor %}
-    </form>
+    </div>
+
+    <!-- Thank You Section -->
+    <div id="thank-you-section" class="content-card verification-card" style="display: none;">
+        <div class="text-center">
+            <div class="success-icon mb-4">
+                <i class="fas fa-check-circle"></i>
+            </div>
+            <h2 class="h3 text-success mb-3">Thank You for Voting!</h2>
+            <p class="text-muted mb-4">Your vote has been successfully recorded. Thank you for participating in the democratic process.</p>
+            
+            <div class="vote-summary mb-4">
+                <h5 class="mb-3">Your Vote Summary:</h5>
+                <div id="vote-summary-content"></div>
+            </div>
+            
+            <div class="d-grid gap-2">
+                <a href="{% url 'voting:home' %}" class="btn btn-outline-secondary">
+                    <i class="fas fa-home me-2"></i>Return to Home
+                </a>
+            </div>
+        </div>
+    </div>
 </div>
+
+<!-- Hidden form for submission -->
+<form id="voteForm" method="post" action="{% url 'voting:election_view' %}" style="display: none;">
+    {% csrf_token %}
+    <div id="vote-data"></div>
+</form>
 {% endblock %}
 
 {% block extra_js %}
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    // Visually update selected candidate card
-    const allRadios = document.querySelectorAll('.form-check-input');
-    allRadios.forEach(radio => {
-        radio.addEventListener('change', function() {
-            // Find all cards in the same post group
-            const groupName = this.name;
-            const postCards = document.querySelectorAll(`input[name="${groupName}"]`);
-            postCards.forEach(r => {
-                r.closest('.candidate-card').classList.remove('selected');
-            });
-            // Add selected class to the parent of the checked radio
-            this.closest('.candidate-card').classList.add('selected');
+    const totalSteps = {{ posts|length }};
+    let currentStep = 1;
+    let votes = {};
+    let voteSummary = {};
+    let skippedPosts = {};
+
+    // Initialize progress bar
+    updateProgress();
+
+    // Vote button click handler
+    document.querySelectorAll('.btn-vote').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const postId = this.dataset.postId;
+            const candidateId = this.dataset.candidateId;
+            const candidateName = this.closest('.candidate-card-voting').querySelector('.candidate-name').textContent;
+            const postTitle = this.closest('.voting-step').querySelector('.step-header h2').textContent;
+            
+            // Store vote
+            votes[postId] = candidateId;
+            voteSummary[postId] = {
+                post: postTitle,
+                candidate: candidateName,
+                type: 'voted'
+            };
+            
+            // Remove from skipped if it was previously skipped
+            delete skippedPosts[postId];
+            
+            // Update UI
+            updateVoteSelection(this);
+            updateNavigationButtons();
         });
     });
 
-    // Handle form submission and check for skipped posts
-    const voteForm = document.getElementById('voteForm');
-    voteForm.addEventListener('submit', function(event) {
-        const posts = {{ posts|length }};
-        const selectedPosts = new Set();
-        const formData = new FormData(voteForm);
-        
-        for (let pair of formData.entries()) {
-            if (pair[0].startsWith('post_')) {
-                selectedPosts.add(pair[0]);
+    // Skip button click handler
+    document.querySelectorAll('.btn-skip').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const currentStepElement = document.querySelector(`[data-step="${currentStep}"]`);
+            const postId = currentStepElement.dataset.postId;
+            const postTitle = currentStepElement.querySelector('.step-header h2').textContent;
+            
+            // Mark as skipped
+            skippedPosts[postId] = true;
+            voteSummary[postId] = {
+                post: postTitle,
+                candidate: 'Skipped',
+                type: 'skipped'
+            };
+            
+            // Remove vote if it was previously selected
+            delete votes[postId];
+            
+            // Update UI
+            clearVoteSelection(currentStepElement);
+            updateNavigationButtons();
+            
+            // Move to next step
+            if (currentStep < totalSteps) {
+                currentStep++;
+                showStep(currentStep);
+                updateProgress();
             }
-        }
-
-        if (selectedPosts.size < posts) {
-            const confirmation = confirm("{% trans 'You have not voted for all positions. Are you sure you want to submit your vote?' %}");
-            if (!confirmation) {
-                event.preventDefault(); // Stop form submission
-            }
-        }
+        });
     });
+
+    // Next button click handler
+    document.querySelectorAll('.btn-next').forEach(btn => {
+        btn.addEventListener('click', function() {
+            if (currentStep < totalSteps) {
+                currentStep++;
+                showStep(currentStep);
+                updateProgress();
+            }
+        });
+    });
+
+    // Previous button click handler
+    document.querySelectorAll('.btn-prev').forEach(btn => {
+        btn.addEventListener('click', function() {
+            if (currentStep > 1) {
+                currentStep--;
+                showStep(currentStep);
+                updateProgress();
+            }
+        });
+    });
+
+    // Submit button click handler
+    document.querySelectorAll('.btn-submit').forEach(btn => {
+        btn.addEventListener('click', function() {
+            submitVotes();
+        });
+    });
+
+    function updateVoteSelection(clickedBtn) {
+        const postId = clickedBtn.dataset.postId;
+        const step = document.querySelector(`[data-post-id="${postId}"]`);
+        
+        // Remove previous selection
+        step.querySelectorAll('.candidate-card-voting').forEach(card => {
+            card.classList.remove('selected');
+            card.querySelector('.btn-vote').classList.remove('btn-success');
+            card.querySelector('.btn-vote').classList.add('btn-outline-primary');
+            card.querySelector('.btn-vote').innerHTML = '<i class="fas fa-vote-yea me-2"></i>Vote';
+        });
+        
+        // Add selection to clicked card
+        clickedBtn.closest('.candidate-card-voting').classList.add('selected');
+        clickedBtn.classList.remove('btn-outline-primary');
+        clickedBtn.classList.add('btn-success');
+        clickedBtn.innerHTML = '<i class="fas fa-check me-2"></i>Selected';
+    }
+
+    function clearVoteSelection(stepElement) {
+        stepElement.querySelectorAll('.candidate-card-voting').forEach(card => {
+            card.classList.remove('selected');
+            card.querySelector('.btn-vote').classList.remove('btn-success');
+            card.querySelector('.btn-vote').classList.add('btn-outline-primary');
+            card.querySelector('.btn-vote').innerHTML = '<i class="fas fa-vote-yea me-2"></i>Vote';
+        });
+    }
+
+    function updateNavigationButtons() {
+        const currentStepElement = document.querySelector(`[data-step="${currentStep}"]`);
+        const postId = currentStepElement.dataset.postId;
+        
+        // Enable next/submit buttons if user has made a choice (vote or skip)
+        if (votes[postId] || skippedPosts[postId]) {
+            if (currentStep < totalSteps) {
+                currentStepElement.querySelector('.btn-next').disabled = false;
+            } else {
+                currentStepElement.querySelector('.btn-submit').disabled = false;
+            }
+        }
+    }
+
+    function showStep(stepNumber) {
+        document.querySelectorAll('.voting-step').forEach(step => {
+            step.style.display = 'none';
+        });
+        document.querySelector(`[data-step="${stepNumber}"]`).style.display = 'block';
+        
+        // Update navigation buttons
+        document.querySelectorAll('.btn-prev').forEach(btn => {
+            btn.style.visibility = stepNumber > 1 ? 'visible' : 'hidden';
+        });
+        
+        // Update current step indicator
+        document.getElementById('current-step').textContent = stepNumber;
+        
+        // Update button states based on previous choices
+        updateNavigationButtons();
+    }
+
+    function updateProgress() {
+        const progress = (currentStep / totalSteps) * 100;
+        document.getElementById('voting-progress').style.width = progress + '%';
+        document.getElementById('voting-progress').setAttribute('aria-valuenow', progress);
+    }
+
+    function submitVotes() {
+        // Prepare vote data
+        const voteData = document.getElementById('vote-data');
+        voteData.innerHTML = '';
+        
+        Object.keys(votes).forEach(postId => {
+            const input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = `post_${postId}`;
+            input.value = votes[postId];
+            voteData.appendChild(input);
+        });
+
+        // Show thank you section
+        document.getElementById('voting-steps').style.display = 'none';
+        document.querySelector('.progress-container').style.display = 'none';
+        
+        // Display vote summary
+        const summaryContent = document.getElementById('vote-summary-content');
+        summaryContent.innerHTML = '';
+        
+        Object.keys(voteSummary).forEach(postId => {
+            const vote = voteSummary[postId];
+            const summaryItem = document.createElement('div');
+            summaryItem.className = 'summary-item mb-2 p-2 bg-light rounded';
+            
+            if (vote.type === 'skipped') {
+                summaryItem.innerHTML = `
+                    <strong>${vote.post}:</strong> <span class="text-warning">Skipped</span>
+                `;
+            } else {
+                summaryItem.innerHTML = `
+                    <strong>${vote.post}:</strong> ${vote.candidate}
+                `;
+            }
+            
+            summaryContent.appendChild(summaryItem);
+        });
+        
+        document.getElementById('thank-you-section').style.display = 'block';
+        
+        // Submit form in background
+        setTimeout(() => {
+            document.getElementById('voteForm').submit();
+        }, 1000);
+    }
 });
 </script>
 {% endblock %}

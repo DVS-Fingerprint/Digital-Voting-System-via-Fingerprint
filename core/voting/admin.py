@@ -14,6 +14,19 @@ class PostAdmin(admin.ModelAdmin):
 class CandidateAdmin(admin.ModelAdmin):
     list_display = ('name', 'post')
     search_fields = ('name',)
+    fieldsets = (
+        ('Basic Information', {
+            'fields': ('name', 'post')
+        }),
+        ('Media', {
+            'fields': ('photo', 'symbol'),
+            'classes': ('collapse',)
+        }),
+        ('Biography', {
+            'fields': ('bio',),
+            'description': 'Brief biography of the candidate (max 500 characters)'
+        }),
+    )
 
 @admin.register(Vote)
 class VoteAdmin(admin.ModelAdmin):
