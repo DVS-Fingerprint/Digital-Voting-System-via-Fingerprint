@@ -1,0 +1,39 @@
+{% extends 'voting/base.html' %}
+{% load i18n %}
+{% block title %}{% trans "Candidate List" %}{% endblock %}
+
+{% block content %}
+<div class="content-card dashboard-card">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1 class="h3 mb-0">{% trans "Official Candidate List" %}</h1>
+        <a href="{% url 'voting:voter_home' %}" class="btn btn-secondary-biomatdaan">
+            <i class="fas fa-arrow-left me-2"></i>{% trans "Back to Dashboard" %}
+        </a>
+    </div>
+
+    {% for post in posts %}
+        <div class="mb-5">
+            <h4 class="post-title">{{ post.title }}</h4>
+            <div class="candidate-list">
+                {% for candidate in post.candidates.all %}
+                    <div class="candidate-card">
+                        {% if candidate.photo %}
+                            <img src="{{ candidate.photo.url }}" alt="{{ candidate.name }}" class="photo">
+                        {% else %}
+                            <i class="fas fa-user-circle fa-3x text-secondary me-3"></i>
+                        {% endif %}
+                        <div class="candidate-info">
+                            {{ candidate.name }}
+                        </div>
+                        {% if candidate.symbol %}
+                            <img src="{{ candidate.symbol.url }}" alt="Symbol" class="symbol">
+                        {% endif %}
+                    </div>
+                {% empty %}
+                    <p class="text-muted">{% trans "No candidates for this position." %}</p>
+                {% endfor %}
+            </div>
+        </div>
+    {% endfor %}
+</div>
+{% endblock %} 

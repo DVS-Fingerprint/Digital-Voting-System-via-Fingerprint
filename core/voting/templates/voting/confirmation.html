@@ -1,1 +1,27 @@
- 
+{% extends 'voting/base.html' %}
+{% load i18n %}
+{% block title %}{% trans "Vote Submitted" %}{% endblock %}
+
+{% block content %}
+<div class="content-card thank-you-card">
+    <div class="icon">
+        <i class="fas fa-check-circle"></i>
+    </div>
+    <h1 class="h2">{% trans "Thank You!" %}</h1>
+    <p>{% trans "Your vote has been securely recorded." %}</p>
+    
+    <div class="alert alert-danger mt-4">
+        <strong>{% trans "Important:" %}</strong> {% trans "Please leave the voting booth now. This screen will reset automatically." %}
+    </div>
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Automatically redirect to the home screen after a delay
+    setTimeout(function() {
+        window.location.href = "{% url 'voting:home' %}";
+    }, 10000); // 10 seconds
+</script>
+{% endblock %} 

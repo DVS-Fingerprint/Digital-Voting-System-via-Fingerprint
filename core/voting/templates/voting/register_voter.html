@@ -2,34 +2,70 @@
 {% block title %}Register Voter | Digital Voting System{% endblock %}
 {% block content %}
 <div class="row justify-content-center">
-  <div class="col-md-6">
-    <div class="card mt-5">
-      <div class="card-header bg-primary text-white">
+  <div class="col-lg-6 col-md-8 col-sm-12">
+    <div class="card shadow-lg border-0">
+      <div class="card-header bg-primary text-white py-3">
         <div class="d-flex justify-content-between align-items-center">
-          <h4 class="mb-0">Register Voter</h4>
+          <h4 class="mb-0">
+            <i class="fas fa-user-plus me-2"></i>Register Voter
+          </h4>
           <a href="{% url 'voting:admin_dashboard' %}" class="btn btn-light btn-sm">
-            <i class="fas fa-arrow-left"></i> Back to Dashboard
+            <i class="fas fa-arrow-left me-1"></i> Back to Dashboard
           </a>
         </div>
       </div>
-      <div class="card-body">
+      <div class="card-body p-4">
         {% if success %}
-          <div class="alert alert-success">Voter registered successfully!</div>
+          <div class="alert alert-success alert-dismissible fade show" role="alert">
+            <i class="fas fa-check-circle me-2"></i>Voter registered successfully!
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+          </div>
         {% endif %}
-        <form method="post" novalidate>
+        
+        <form method="post" novalidate class="needs-validation">
           {% csrf_token %}
-          {{ form.non_field_errors }}
-          <div class="mb-3">
-            <label for="{{ form.name.id_for_label }}" class="form-label">Full Name</label>
+          {% if form.non_field_errors %}
+            <div class="alert alert-danger">
+              {{ form.non_field_errors }}
+            </div>
+          {% endif %}
+          
+          <div class="mb-4">
+            <label for="{{ form.name.id_for_label }}" class="form-label fw-bold">
+              <i class="fas fa-user me-2"></i>Full Name
+            </label>
             {{ form.name }}
-            {{ form.name.errors }}
+            {% if form.name.errors %}
+              <div class="invalid-feedback d-block">
+                {% for error in form.name.errors %}
+                  <i class="fas fa-exclamation-circle me-1"></i>{{ error }}
+                {% endfor %}
+              </div>
+            {% endif %}
           </div>
-          <div class="mb-3">
-            <label for="{{ form.uid.id_for_label }}" class="form-label">Fingerprint UID</label>
+          
+          <div class="mb-4">
+            <label for="{{ form.uid.id_for_label }}" class="form-label fw-bold">
+              <i class="fas fa-fingerprint me-2"></i>Fingerprint UID
+            </label>
             {{ form.uid }}
-            {{ form.uid.errors }}
+            {% if form.uid.errors %}
+              <div class="invalid-feedback d-block">
+                {% for error in form.uid.errors %}
+                  <i class="fas fa-exclamation-circle me-1"></i>{{ error }}
+                {% endfor %}
+              </div>
+            {% endif %}
+            <div class="form-text">
+              <i class="fas fa-info-circle me-1"></i>Enter the unique fingerprint identifier
+            </div>
           </div>
-          <button type="submit" class="btn btn-success w-100">Register</button>
+          
+          <div class="d-grid gap-2">
+            <button type="submit" class="btn btn-success btn-lg">
+              <i class="fas fa-save me-2"></i>Register Voter
+            </button>
+          </div>
         </form>
       </div>
     </div>

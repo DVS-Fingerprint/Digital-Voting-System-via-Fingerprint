@@ -1,11 +1,10 @@
 from django.shortcuts import render, get_object_or_404, redirect
 from .models import Candidate, Voter, Vote, Post, VotingSession
 from django.utils import timezone
-from django.http import HttpResponse,HttpResponseRedirect
+from django.http import HttpResponse, HttpResponseRedirect
 from django.contrib.admin.views.decorators import staff_member_required
 from django.db.models import Count
 from .forms import VoterRegistrationForm
-from django.shortcuts import render, redirect
 from rest_framework import status, permissions, generics, views
 from rest_framework.response import Response
 from rest_framework.decorators import api_view, permission_classes, authentication_classes
@@ -74,17 +73,12 @@ def admin_dashboard(request):
 def home(request):
     return render(request, 'voting/home.html')
 
-@api_view(['POST'])
-def authenticate_fingerprint(request):
-    """ESP32 sends UID, returns voter status."""
-    uid = request.data.get('uid')
-    try:
-        voter = Voter.objects.get(uid=uid)
-        if voter.has_voted:
-            return Response({'status': 'already_voted', 'name': voter.name}, status=200)
-        return Response({'status': 'ok', 'name': voter.name}, status=200)
-    except Voter.DoesNotExist:
-        return Response({'status': 'not_found'}, status=404)
+def voter_home(request):
+    return render(request, 'voting/voter_home.html')
+
+def candidate_list(request):
+    posts = Post.objects.all()
+    return render(request, 'voting/candidate_list.html', {'posts': posts})
 
 @api_view(['GET'])
 def posts_list(request):
@@ -169,3 +163,38 @@ def dashboard_view(request):
         'voting_session': VotingSessionSerializer(session).data if session else None,
     }
     return Response(data)
+
+@api_view(['POST'])
+def authenticate_fingerprint(request):
+    """ESP32 sends UID, returns voter status."""
+    uid = request.data.get('uid')
+    try:
+        voter = Voter.objects.get(uid=uid)
+        if voter.has_voted:
+            return Response({'status': 'already_voted', 'name': voter.name}, status=200)
+        return Response({'status': 'ok', 'name': voter.name}, status=200)
+    except Voter.DoesNotExist:
+        return Response({'status': 'not_found'}, status=404)
+
+def scanner(request):
+    return render(request, 'voting/scanner.html')
+
+def election_view(request):
+    posts = Post.objects.prefetch_related('candidates').all()
+    if request.method == 'POST':
+        # Logic to handle vote submission will go here
+        return redirect('voting:thankyou')
+    return render(request, 'voting/election.html', {'posts': posts})
+
+def thankyou(request):
+    # Example: show choices summary (replace with real logic)
+    choices = request.session.get('choices', [])
+    return render(request, 'voting/confirmation.html', {'choices': choices})
+
+def dashboard(request):
+    # This view is being deprecated in favor of the new flow.
+    # It will be removed once the transition is complete.
+    from .models import Post
+    posts = Post.objects.prefetch_related('candidates').all()
+    session_countdown = 300
+    return render(request, 'voting/election.html', {'posts': posts, 'session_countdown': session_countdown})

@@ -6,62 +6,138 @@
 {% block content %}
 <div class="row mb-4">
   <div class="col-12">
-    <div class="d-flex justify-content-between align-items-center mb-3">
-      <h2>Admin Dashboard</h2>
+    <div class="d-flex justify-content-between align-items-center mb-4">
       <div>
+        <h2 class="mb-1">
+          <i class="fas fa-tachometer-alt me-2 text-primary"></i>Admin Dashboard
+        </h2>
+        <p class="text-muted mb-0">Manage voters, candidates, and monitor voting progress</p>
+      </div>
+      <div class="d-flex gap-2">
         <a href="{% url 'voting:register_voter' %}" class="btn btn-primary">
-          <i class="fas fa-user-plus"></i> Register Voter
+          <i class="fas fa-user-plus me-2"></i> Register Voter
         </a>
         <a href="/admin/" class="btn btn-secondary">
-          <i class="fas fa-cog"></i> Django Admin
+          <i class="fas fa-cog me-2"></i> Django Admin
         </a>
       </div>
     </div>
   </div>
 </div>
 
+<!-- Statistics Cards -->
 <div class="row mb-4">
-  <div class="col-md-4">
-    <div class="card text-bg-primary mb-3">
-      <div class="card-body text-center">
-        <h5 class="card-title">Total Voters</h5>
-        <p class="display-6">{{ total_voters }}</p>
+  <div class="col-lg-4 col-md-6 mb-3">
+    <div class="card text-bg-primary border-0 shadow-sm h-100">
+      <div class="card-body text-center p-4">
+        <div class="d-flex align-items-center justify-content-center mb-3">
+          <i class="fas fa-users fa-2x me-3"></i>
+          <div>
+            <h5 class="card-title mb-1">Total Voters</h5>
+            <p class="display-6 fw-bold mb-0">{{ total_voters }}</p>
+          </div>
+        </div>
       </div>
     </div>
   </div>
-  <div class="col-md-4">
-    <div class="card text-bg-success mb-3">
-      <div class="card-body text-center">
-        <h5 class="card-title">Total Votes</h5>
-        <p class="display-6">{{ total_votes }}</p>
+  <div class="col-lg-4 col-md-6 mb-3">
+    <div class="card text-bg-success border-0 shadow-sm h-100">
+      <div class="card-body text-center p-4">
+        <div class="d-flex align-items-center justify-content-center mb-3">
+          <i class="fas fa-vote-yea fa-2x me-3"></i>
+          <div>
+            <h5 class="card-title mb-1">Total Votes</h5>
+            <p class="display-6 fw-bold mb-0">{{ total_votes }}</p>
+          </div>
+        </div>
       </div>
     </div>
   </div>
-  <div class="col-md-4">
-    <div class="card text-bg-secondary mb-3">
-      <div class="card-body text-center">
-        <h5 class="card-title">Total Candidates</h5>
-        <p class="display-6">{{ total_candidates }}</p>
+  <div class="col-lg-4 col-md-6 mb-3">
+    <div class="card text-bg-info border-0 shadow-sm h-100">
+      <div class="card-body text-center p-4">
+        <div class="d-flex align-items-center justify-content-center mb-3">
+          <i class="fas fa-user-tie fa-2x me-3"></i>
+          <div>
+            <h5 class="card-title mb-1">Total Candidates</h5>
+            <p class="display-6 fw-bold mb-0">{{ total_candidates }}</p>
+          </div>
+        </div>
       </div>
     </div>
   </div>
 </div>
-<div class="card mb-4">
-  <div class="card-header bg-dark text-white">
-    <strong>Live Results</strong>
+
+<!-- Voting Progress -->
+<div class="row mb-4">
+  <div class="col-12">
+    <div class="card border-0 shadow-sm">
+      <div class="card-header bg-dark text-white py-3">
+        <div class="d-flex align-items-center">
+          <i class="fas fa-chart-bar me-2"></i>
+          <strong>Live Voting Results</strong>
+        </div>
+      </div>
+      <div class="card-body p-4">
+        {% if vote_counts %}
+          <canvas id="resultsChart" height="100"></canvas>
+          <script id="vote-data" type="application/json">
+            {
+              "labels": [{% for c in vote_counts %}"{{ c.name }}"{% if not forloop.last %}, {% endif %}{% endfor %}],
+              "data": [{% for c in vote_counts %}{{ c.num_votes }}{% if not forloop.last %}, {% endif %}{% endfor %}]
+            }
+          </script>
+        {% else %}
+          <div class="text-center py-5">
+            <i class="fas fa-chart-bar fa-3x text-muted mb-3"></i>
+            <h5 class="text-muted">No voting data available yet</h5>
+            <p class="text-muted">Voting results will appear here once votes are cast</p>
+          </div>
+        {% endif %}
+      </div>
+    </div>
   </div>
-  <div class="card-body">
-    <canvas id="resultsChart" height="100"></canvas>
-    <script id="vote-data" type="application/json">
-      {
-        "labels": [{% for c in vote_counts %}"{{ c.name }}"{% if not forloop.last %}, {% endif %}{% endfor %}],
-        "data": [{% for c in vote_counts %}{{ c.num_votes }}{% if not forloop.last %}, {% endif %}{% endfor %}]
-      }
-    </script>
+</div>
+
+<!-- Quick Actions -->
+<div class="row">
+  <div class="col-12">
+    <div class="card border-0 shadow-sm">
+      <div class="card-header bg-light py-3">
+        <div class="d-flex align-items-center">
+          <i class="fas fa-bolt me-2 text-warning"></i>
+          <strong>Quick Actions</strong>
+        </div>
+      </div>
+      <div class="card-body p-4">
+        <div class="row">
+          <div class="col-md-4 mb-3">
+            <a href="{% url 'voting:register_voter' %}" class="btn btn-outline-primary w-100 py-3">
+              <i class="fas fa-user-plus fa-2x mb-2"></i>
+              <br>Register New Voter
+            </a>
+          </div>
+          <div class="col-md-4 mb-3">
+            <a href="/admin/voting/candidate/add/" class="btn btn-outline-success w-100 py-3">
+              <i class="fas fa-user-tie fa-2x mb-2"></i>
+              <br>Add Candidate
+            </a>
+          </div>
+          <div class="col-md-4 mb-3">
+            <a href="/admin/voting/post/add/" class="btn btn-outline-info w-100 py-3">
+              <i class="fas fa-list-alt fa-2x mb-2"></i>
+              <br>Create Post
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 {% endblock %}
+
 {% block extra_js %}
+{% if vote_counts %}
 <script>
 const voteData = JSON.parse(document.getElementById('vote-data').textContent);
 const ctx = document.getElementById('resultsChart').getContext('2d');
@@ -72,13 +148,53 @@ new Chart(ctx, {
     datasets: [{
       label: 'Votes',
       data: voteData.data,
-      backgroundColor: 'rgba(54, 162, 235, 0.7)'
+      backgroundColor: 'rgba(0, 180, 216, 0.7)',
+      borderColor: 'rgba(0, 180, 216, 1)',
+      borderWidth: 2,
+      borderRadius: 8,
+      borderSkipped: false,
     }]
   },
   options: {
     responsive: true,
-    plugins: { legend: { display: false } }
+    maintainAspectRatio: false,
+    plugins: { 
+      legend: { 
+        display: false 
+      },
+      tooltip: {
+        backgroundColor: 'rgba(0, 0, 0, 0.8)',
+        titleColor: '#fff',
+        bodyColor: '#fff',
+        borderColor: 'rgba(0, 180, 216, 1)',
+        borderWidth: 1,
+        cornerRadius: 8,
+        displayColors: false,
+      }
+    },
+    scales: {
+      y: {
+        beginAtZero: true,
+        grid: {
+          color: 'rgba(0, 0, 0, 0.1)',
+        },
+        ticks: {
+          stepSize: 1,
+          color: '#6c757d'
+        }
+      },
+      x: {
+        grid: {
+          display: false
+        },
+        ticks: {
+          color: '#6c757d',
+          maxRotation: 45
+        }
+      }
+    }
   }
 });
 </script>
+{% endif %}
 {% endblock %}
