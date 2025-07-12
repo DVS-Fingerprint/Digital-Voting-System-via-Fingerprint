@@ -1,32 +1,65 @@
 from django.core.management.base import BaseCommand
 from voting.models import Post, Candidate, Voter, VotingSession
-from django.utils import timezone, dateparse
+from django.utils import timezone
+from datetime import timedelta
 
 class Command(BaseCommand):
-    help = 'Add demo data for Digital Voting System'
+    help = 'Add demo data for testing'
 
     def handle(self, *args, **options):
-        # Create Posts
-        post1, _ = Post.objects.get_or_create(title='President')  # type: ignore
-        post2, _ = Post.objects.get_or_create(title='Vice President')  # type: ignore
+        # Create posts
+        president, _ = Post.objects.get_or_create(title='President')  # type: ignore
+        vice_president, _ = Post.objects.get_or_create(title='Vice President')  # type: ignore
+        secretary, _ = Post.objects.get_or_create(title='Secretary')  # type: ignore
 
-        # Create Candidates
-        c1, _ = Candidate.objects.get_or_create(name='Alice Johnson', post=post1)  # type: ignore
-        c2, _ = Candidate.objects.get_or_create(name='Bob Smith', post=post1)  # type: ignore
-        c3, _ = Candidate.objects.get_or_create(name='Carol Lee', post=post2)  # type: ignore
-        c4, _ = Candidate.objects.get_or_create(name='David Kim', post=post2)  # type: ignore
+        # Create candidates
+        c1, _ = Candidate.objects.get_or_create(  # type: ignore
+            name='Alice Johnson',
+            post=president,
+            bio='Experienced leader with 10 years of community service.'
+        )
+        c2, _ = Candidate.objects.get_or_create(  # type: ignore
+            name='Bob Smith',
+            post=president,
+            bio='Innovative thinker with strong technical background.'
+        )
+        c3, _ = Candidate.objects.get_or_create(  # type: ignore
+            name='Carol Davis',
+            post=vice_president,
+            bio='Dedicated team player with excellent communication skills.'
+        )
+        c4, _ = Candidate.objects.get_or_create(  # type: ignore
+            name='David Wilson',
+            post=secretary,
+            bio='Organized and detail-oriented professional.'
+        )
 
-        # Create Voters
-        v1, _ = Voter.objects.get_or_create(name='John Doe', uid='F123456')  # type: ignore
-        v2, _ = Voter.objects.get_or_create(name='Jane Roe', uid='F654321')  # type: ignore
-        v3, _ = Voter.objects.get_or_create(name='Sam Patel', uid='F111222')  # type: ignore
+        # Create voters
+        v1, _ = Voter.objects.get_or_create(  # type: ignore
+            name='John Doe',
+            email='john.doe@example.com',
+            fingerprint_id='F123456'
+        )
+        v2, _ = Voter.objects.get_or_create(  # type: ignore
+            name='Jane Roe',
+            email='jane.roe@example.com',
+            fingerprint_id='F654321'
+        )
+        v3, _ = Voter.objects.get_or_create(  # type: ignore
+            name='Sam Patel',
+            email='sam.patel@example.com',
+            fingerprint_id='F111222'
+        )
 
-        # Create an active voting session
-        now = timezone.now()
+        # Create voting session
+        start_time = timezone.now()
+        end_time = start_time + timedelta(hours=24)
         session, _ = VotingSession.objects.get_or_create(  # type: ignore
-            start_time=now,
-            end_time=now + timezone.timedelta(hours=2),
+            start_time=start_time,
+            end_time=end_time,
             is_active=True
         )
 
-        self.stdout.write(self.style.SUCCESS('Demo data added successfully!'))  # type: ignore 
+        self.stdout.write(
+            self.style.SUCCESS('Successfully created demo data')
+        ) 

@@ -127,6 +127,9 @@
     {% csrf_token %}
     <div id="vote-data"></div>
 </form>
+
+<!-- CSRF Token for API calls -->
+{% csrf_token %}
 {% endblock %}
 
 {% block extra_js %}
@@ -293,50 +296,75 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function submitVotes() {
-        // Prepare vote data
-        const voteData = document.getElementById('vote-data');
-        voteData.innerHTML = '';
-        
+        // Prepare vote data for API submission
+        const voteData = [];
         Object.keys(votes).forEach(postId => {
-            const input = document.createElement('input');
-            input.type = 'hidden';
-            input.name = `post_${postId}`;
-            input.value = votes[postId];
-            voteData.appendChild(input);
+            voteData.push({
+                post: parseInt(postId),
+                candidate: parseInt(votes[postId])
+            });
         });
 
-        // Show thank you section
-        document.getElementById('voting-steps').style.display = 'none';
-        document.querySelector('.progress-container').style.display = 'none';
-        
-        // Display vote summary
-        const summaryContent = document.getElementById('vote-summary-content');
-        summaryContent.innerHTML = '';
-        
-        Object.keys(voteSummary).forEach(postId => {
-            const vote = voteSummary[postId];
-            const summaryItem = document.createElement('div');
-            summaryItem.className = 'summary-item mb-2 p-2 bg-light rounded';
-            
-            if (vote.type === 'skipped') {
-                summaryItem.innerHTML = `
-                    <strong>${vote.post}:</strong> <span class="text-warning">Skipped</span>
-                `;
+        // Show loading state
+        const submitBtn = document.querySelector('.btn-submit');
+        const originalText = submitBtn.innerHTML;
+        submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Submitting...';
+        submitBtn.disabled = true;
+
+        // Submit votes via API
+        fetch('/voting/api/submit-vote/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]')?.value || ''
+            },
+            body: JSON.stringify({
+                votes: voteData
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'success') {
+                // Show thank you section
+                document.getElementById('voting-steps').style.display = 'none';
+                document.querySelector('.progress-container').style.display = 'none';
+                
+                // Display vote summary
+                const summaryContent = document.getElementById('vote-summary-content');
+                summaryContent.innerHTML = '';
+                
+                Object.keys(voteSummary).forEach(postId => {
+                    const vote = voteSummary[postId];
+                    const summaryItem = document.createElement('div');
+                    summaryItem.className = 'summary-item mb-2 p-2 bg-light rounded';
+                    
+                    if (vote.type === 'skipped') {
+                        summaryItem.innerHTML = `
+                            <strong>${vote.post}:</strong> <span class="text-warning">Skipped</span>
+                        `;
+                    } else {
+                        summaryItem.innerHTML = `
+                            <strong>${vote.post}:</strong> ${vote.candidate}
+                        `;
+                    }
+                    
+                    summaryContent.appendChild(summaryItem);
+                });
+                
+                document.getElementById('thank-you-section').style.display = 'block';
             } else {
-                summaryItem.innerHTML = `
-                    <strong>${vote.post}:</strong> ${vote.candidate}
-                `;
+                // Show error
+                alert('Error submitting vote: ' + (data.error || 'Unknown error'));
+                submitBtn.innerHTML = originalText;
+                submitBtn.disabled = false;
             }
-            
-            summaryContent.appendChild(summaryItem);
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Error submitting vote. Please try again.');
+            submitBtn.innerHTML = originalText;
+            submitBtn.disabled = false;
         });
-        
-        document.getElementById('thank-you-section').style.display = 'block';
-        
-        // Submit form in background
-        setTimeout(() => {
-            document.getElementById('voteForm').submit();
-        }, 1000);
     }
 });
 </script>

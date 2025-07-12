@@ -4,7 +4,7 @@ from .models import Voter, Post, Candidate, Vote, VotingSession, ActivityLog
 class VoterSerializer(serializers.ModelSerializer):
     class Meta:
         model = Voter
-        fields = ['id', 'name', 'uid', 'has_voted', 'last_vote_attempt']
+        fields = ['id', 'name', 'email', 'fingerprint_id', 'has_voted', 'last_vote_attempt', 'created_at']
 
 class PostSerializer(serializers.ModelSerializer):
     class Meta:
@@ -17,7 +17,7 @@ class CandidateSerializer(serializers.ModelSerializer):
     symbol = serializers.ImageField(required=False)
     class Meta:
         model = Candidate
-        fields = ['id', 'name', 'photo', 'symbol', 'post']
+        fields = ['id', 'name', 'photo', 'symbol', 'post', 'bio']
 
 class VoteSerializer(serializers.ModelSerializer):
     voter = VoterSerializer(read_only=True)

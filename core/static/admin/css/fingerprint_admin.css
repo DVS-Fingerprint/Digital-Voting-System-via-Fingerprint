@@ -1,0 +1,129 @@
+/* Fingerprint Admin Interface Styles */
+
+.fingerprint-id-field {
+    background-color: #f8f9fa !important;
+    border: 2px dashed #dee2e6 !important;
+    font-family: 'Courier New', monospace;
+    font-weight: bold;
+    color: #495057;
+    transition: all 0.3s ease;
+}
+
+.fingerprint-id-field:focus {
+    background-color: #e9ecef !important;
+    border-color: #007cba !important;
+    box-shadow: 0 0 0 0.2rem rgba(0, 124, 186, 0.25);
+}
+
+.fingerprint-id-field[readonly] {
+    cursor: not-allowed;
+}
+
+/* Success state when fingerprint is detected */
+.fingerprint-id-field.fingerprint-detected {
+    background-color: #d4edda !important;
+    border-color: #c3e6cb !important;
+    color: #155724 !important;
+}
+
+/* Error state */
+.fingerprint-id-field.fingerprint-error {
+    background-color: #f8d7da !important;
+    border-color: #f5c6cb !important;
+    color: #721c24 !important;
+}
+
+/* Polling indicator */
+.fingerprint-polling-indicator {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    background: #007cba;
+    color: white;
+    padding: 8px 12px;
+    border-radius: 4px;
+    font-size: 12px;
+    z-index: 9998;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.fingerprint-polling-indicator .pulse-dot {
+    width: 8px;
+    height: 8px;
+    background: #4CAF50;
+    border-radius: 50%;
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0% { opacity: 1; }
+    50% { opacity: 0.5; }
+    100% { opacity: 1; }
+}
+
+/* Message notifications */
+.fingerprint-message {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    padding: 10px 15px;
+    border-radius: 4px;
+    color: white;
+    font-weight: bold;
+    z-index: 9999;
+    max-width: 300px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    animation: slideIn 0.3s ease-out;
+}
+
+.fingerprint-message.alert-success {
+    background-color: #28a745;
+}
+
+.fingerprint-message.alert-info {
+    background-color: #17a2b8;
+}
+
+@keyframes slideIn {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+/* Form field labels */
+.field-fingerprint_id label {
+    font-weight: bold;
+    color: #495057;
+}
+
+.field-fingerprint_id .help {
+    color: #6c757d;
+    font-size: 12px;
+    font-style: italic;
+    margin-top: 4px;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+    .fingerprint-polling-indicator {
+        bottom: 10px;
+        right: 10px;
+        font-size: 10px;
+        padding: 6px 10px;
+    }
+    
+    .fingerprint-message {
+        top: 10px;
+        right: 10px;
+        max-width: 250px;
+        font-size: 12px;
+    }
+} 

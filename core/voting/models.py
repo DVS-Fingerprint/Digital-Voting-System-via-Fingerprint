@@ -18,12 +18,14 @@ class Post(models.Model):
 
 class Voter(models.Model):
     name = models.CharField(max_length=255)
-    uid = models.CharField(max_length=100, unique=True)  # Fingerprint UID
+    email = models.EmailField(unique=True)
+    fingerprint_id = models.CharField(max_length=100, unique=True, null=True, blank=True)
     has_voted = models.BooleanField(default=False)  # type: ignore
     last_vote_attempt = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
-        return self.name
+        return f"{self.name} ({self.email})"
 
 class Candidate(models.Model):
     name = models.CharField(max_length=100)

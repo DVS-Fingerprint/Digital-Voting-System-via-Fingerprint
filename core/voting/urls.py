@@ -11,6 +11,8 @@ urlpatterns = [
     path('vote/', views.election_view, name='election_view'),
     path('candidates/', views.candidate_list, name='candidate_list'),
     path('thank-you/', views.thankyou, name='thankyou'),
+    path('already-voted/', views.already_voted, name='already_voted'),
+    path('logout/', views.logout_voter, name='logout_voter'),
 
     # Admin/Staff Views
     path('register-voter/', views.register_voter, name='register_voter'),
@@ -25,5 +27,13 @@ urlpatterns = [
         path('register-candidate/', views.register_candidate, name='register_candidate'),
         path('dashboard-data/', views.dashboard_view, name='dashboard_data'),
         path('authenticate-fingerprint/', views.authenticate_fingerprint, name='authenticate_fingerprint'),
+        # New fingerprint-based voting endpoints
+        path('fingerprint-scan/', views.fingerprint_scan, name='fingerprint_scan'),
+        path('get-latest-fingerprint/', views.get_latest_fingerprint, name='get_latest_fingerprint'),
+        path('verify-fingerprint/', views.verify_fingerprint, name='verify_fingerprint'),
+        path('check-duplicate-fingerprint/', views.check_duplicate_fingerprint, name='check_duplicate_fingerprint'),
+        # New authentication and voting endpoints
+        path('authenticate-voter/', views.authenticate_voter, name='authenticate_voter'),
+        path('submit-vote/', views.submit_vote, name='submit_vote'),
     ])),
 ]

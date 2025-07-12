@@ -1,0 +1,38 @@
+{% extends 'voting/base.html' %}
+{% load i18n %}
+{% block title %}{% trans "Already Voted" %}{% endblock %}
+
+{% block content %}
+<div class="content-card verification-card">
+    <div class="text-center">
+        <div class="warning-icon mb-4">
+            <i class="fas fa-exclamation-triangle fa-3x text-warning"></i>
+        </div>
+        <h2 class="h3 text-warning mb-3">{% trans "Already Voted" %}</h2>
+        
+        {% if voter %}
+            <p class="text-muted mb-4">
+                Hello <strong>{{ voter.name }}</strong>, you have already cast your vote in this election.
+            </p>
+        {% else %}
+            <p class="text-muted mb-4">
+                This fingerprint has already been used to cast a vote in this election.
+            </p>
+        {% endif %}
+        
+        <div class="alert alert-info">
+            <i class="fas fa-info-circle me-2"></i>
+            <strong>Important:</strong> Each voter can only vote once per election to ensure the integrity of the voting process.
+        </div>
+        
+        <div class="d-grid gap-2 mt-4">
+            <a href="{% url 'voting:home' %}" class="btn btn-primary-biomatdaan">
+                <i class="fas fa-home me-2"></i>{% trans "Return to Home" %}
+            </a>
+            <a href="{% url 'voting:logout' %}" class="btn btn-outline-secondary">
+                <i class="fas fa-sign-out-alt me-2"></i>{% trans "Logout" %}
+            </a>
+        </div>
+    </div>
+</div>
+{% endblock %} 

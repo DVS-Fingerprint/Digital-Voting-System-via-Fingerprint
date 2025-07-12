@@ -1,6 +1,6 @@
 {% extends 'voting/base.html' %}
 {% load i18n %}
-{% block title %}{% trans "Scanning" %}{% endblock %}
+{% block title %}{% trans "Fingerprint Verification" %}{% endblock %}
 
 {% block content %}
 <div class="content-card verification-card">
@@ -28,30 +28,107 @@
 document.addEventListener('DOMContentLoaded', function() {
     const progressBar = document.getElementById('scan-progress-bar');
     const scanMessage = document.getElementById('scan-message');
+    let isScanning = false;
 
-    // This is a mock API call. In a real scenario, this would
-    // be a long-polling or WebSocket connection to the fingerprint hardware.
+    // Function to simulate fingerprint scanning
+    function startScan() {
+        if (isScanning) return;
+        isScanning = true;
+        
+        scanMessage.textContent = 'Waiting for scanner...';
+        let progress = 0;
+
+        const interval = setInterval(() => {
+            progress += 25;
+            progressBar.style.width = progress + '%';
+            scanMessage.textContent = `Scanning... (${progress}%)`;
+
+            if (progress >= 100) {
+                clearInterval(interval);
+                scanMessage.textContent = 'Verifying fingerprint...';
+                
+                // Simulate fingerprint verification with ESP32
+                setTimeout(() => {
+                    verifyFingerprint();
+                }, 1000);
+            }
+        }, 800);
+    }
+
+    // Function to verify fingerprint with backend
+    function verifyFingerprint() {
+        // In a real scenario, this would get the fingerprint ID from ESP32
+        // For demo purposes, we'll simulate with a test fingerprint ID
+        const testFingerprintId = 'test_fingerprint_123'; // Replace with actual ESP32 data
+        
+        fetch('/voting/api/authenticate-voter/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]')?.value || ''
+            },
+            body: JSON.stringify({
+                fingerprint_id: testFingerprintId
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'authenticated') {
+                scanMessage.textContent = `Welcome, ${data.voter_name}! Redirecting...`;
+                progressBar.className = 'progress-bar bg-success';
+                
+                setTimeout(() => {
+                    window.location.href = data.redirect_url;
+                }, 1500);
+            } else if (data.status === 'already_voted') {
+                scanMessage.textContent = `Hello ${data.voter_name}, you have already voted.`;
+                progressBar.className = 'progress-bar bg-warning';
+                
+                setTimeout(() => {
+                    window.location.href = '/voting/already-voted/';
+                }, 2000);
+            } else if (data.status === 'not_found') {
+                scanMessage.textContent = 'Fingerprint not registered. Please contact administrator.';
+                progressBar.className = 'progress-bar bg-danger';
+                isScanning = false;
+            } else {
+                scanMessage.textContent = 'Verification failed. Please try again.';
+                progressBar.className = 'progress-bar bg-danger';
+                isScanning = false;
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            scanMessage.textContent = 'Connection error. Please try again.';
+            progressBar.className = 'progress-bar bg-danger';
+            isScanning = false;
+        });
+    }
+
+    // Start scanning when page loads
+    startScan();
+
+    // Add manual retry button if needed
+    const retryButton = document.createElement('button');
+    retryButton.className = 'btn btn-outline-primary mt-3';
+    retryButton.innerHTML = '<i class="fas fa-redo me-2"></i>Retry Scan';
+    retryButton.style.display = 'none';
+    retryButton.onclick = function() {
+        progressBar.className = 'progress-bar bg-info';
+        progressBar.style.width = '0%';
+        isScanning = false;
+        startScan();
+        this.style.display = 'none';
+    };
     
-    scanMessage.textContent = 'Waiting for scanner...';
-    let progress = 0;
+    document.querySelector('#scan-status').appendChild(retryButton);
 
-    const interval = setInterval(() => {
-        progress += 25;
-        progressBar.style.width = progress + '%';
-        scanMessage.textContent = `Scanning... (${progress}%)`;
-
-        if (progress >= 100) {
-            clearInterval(interval);
-            scanMessage.textContent = 'Verifying...';
-            
-            // SIMULATE SUCCESS: In a real app, you'd get a UID and check it.
-            // If verification is successful, the backend redirects or returns a URL.
-            // For this demo, we'll just redirect to a new voter dashboard page.
-            setTimeout(() => {
-                window.location.href = "{% url 'voting:voter_home' %}";
-            }, 1000);
+    // Show retry button after error
+    setTimeout(() => {
+        if (scanMessage.textContent.includes('error') || scanMessage.textContent.includes('failed')) {
+            retryButton.style.display = 'block';
         }
-    }, 800);
+    }, 5000);
 });
 </script>
 {% endblock %} 
