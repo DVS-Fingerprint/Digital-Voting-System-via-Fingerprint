@@ -98,18 +98,19 @@ def home(request):
     return render(request, 'voting/home.html')
 
 def voter_home(request):
-    voter_id = request.session.get('authenticated_voter_id')
-    if not voter_id:
-        return redirect('voting:scanner')
-    
-    try:
-        voter = Voter.objects.get(id=voter_id)  # type: ignore
-        if voter.has_voted:
-            return redirect('voting:already_voted')
-        return render(request, 'voting/voter_home.html', {'voter': voter})
-    except Voter.DoesNotExist:  # type: ignore
-        request.session.pop('authenticated_voter_id', None)
-        return redirect('voting:scanner')
+    # voter_id = request.session.get('authenticated_voter_id')
+    # if not voter_id:
+    #     return redirect('voting:scanner')
+    # try:
+    #     voter = Voter.objects.get(id=voter_id)  # type: ignore
+    #     if voter.has_voted:
+    #         return redirect('voting:already_voted')
+    #     return render(request, 'voting/voter_home.html', {'voter': voter})
+    # except Voter.DoesNotExist:  # type: ignore
+    #     request.session.pop('authenticated_voter_id', None)
+    #     return redirect('voting:scanner')
+    # For development, just show the page without auth
+    return render(request, 'voting/voter_home.html')
 
 def candidate_list(request):
     posts = Post.objects.all()  # type: ignore
@@ -315,13 +316,13 @@ def verify_fingerprint(request):
 def scanner(request):
     return render(request, 'voting/scanner.html')
 
-@fingerprint_required
+# @fingerprint_required
 def election_view(request):
     posts = Post.objects.prefetch_related('candidates').all()  # type: ignore
     if request.method == 'POST':
         # Logic to handle vote submission will go here
         return redirect('voting:thankyou')
-    return render(request, 'voting/election.html', {'posts': posts, 'voter': request.voter})
+    return render(request, 'voting/election.html', {'posts': posts})
 
 def thankyou(request):
     # Example: show choices summary (replace with real logic)
@@ -390,7 +391,7 @@ def authenticate_voter(request):
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
 
-@fingerprint_required
+# @fingerprint_required
 def submit_vote(request):
     """Submit vote with authentication check"""
     if request.method != 'POST':
@@ -408,7 +409,7 @@ def submit_vote(request):
         if not session:
             return JsonResponse({'error': 'Voting is not active'}, status=403)
         
-        # Record votes
+        # Record votes (simulate, no voter check)
         for vote_item in votes:
             post_id = vote_item.get('post')
             candidate_id = vote_item.get('candidate')
@@ -419,14 +420,14 @@ def submit_vote(request):
             try:
                 post = Post.objects.get(id=post_id)  # type: ignore
                 candidate = Candidate.objects.get(id=candidate_id, post=post)  # type: ignore
-                Vote.objects.create(voter=request.voter, candidate=candidate, post=post)  # type: ignore
+                Vote.objects.create(candidate=candidate, post=post)  # type: ignore
             except (Post.DoesNotExist, Candidate.DoesNotExist):  # type: ignore
                 continue
         
         # Mark voter as voted
-        request.voter.has_voted = True
-        request.voter.last_vote_attempt = timezone.now()
-        request.voter.save()
+        # request.voter.has_voted = True # This line is removed as voter is not authenticated
+        # request.voter.last_vote_attempt = timezone.now() # This line is removed as voter is not authenticated
+        # request.voter.save() # This line is removed as voter is not authenticated
         
         # Clear session
         request.session.pop('authenticated_voter_id', None)
@@ -434,7 +435,7 @@ def submit_vote(request):
         return JsonResponse({
             'status': 'success',
             'message': 'Vote submitted successfully',
-            'voter_name': request.voter.name
+            'voter_name': None # No voter name available without authentication
         })
         
     except json.JSONDecodeError:
