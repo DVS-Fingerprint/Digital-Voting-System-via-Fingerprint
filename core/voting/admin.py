@@ -1,5 +1,8 @@
 from django.contrib import admin
 from .models import Voter, Post, Candidate, Vote, VotingSession, ActivityLog
+from .models import FingerprintTemplate
+
+admin.site.register(FingerprintTemplate)
 
 @admin.register(Voter)
 class VoterAdmin(admin.ModelAdmin):

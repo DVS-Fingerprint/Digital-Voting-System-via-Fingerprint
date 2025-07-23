@@ -52,4 +52,12 @@ class ActivityLog(models.Model):
 
     def __str__(self):
         return f"{self.timestamp}: {self.action}"
+    
+class FingerprintTemplate(models.Model):
+    user_id = models.IntegerField()
+    template_hex = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"User {self.user_id} - Template at {self.created_at}"
 

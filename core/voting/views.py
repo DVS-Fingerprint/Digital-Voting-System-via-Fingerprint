@@ -14,6 +14,10 @@ from .serializers import (
     VotingSessionSerializer
 )
 from rest_framework.permissions import IsAdminUser
+from django.http import JsonResponse
+from django.views.decorators.csrf import csrf_exempt
+import json
+from .models import FingerprintTemplate
 
 # Remove or update old views that used Election
 # def home(request):
@@ -198,3 +202,36 @@ def dashboard(request):
     posts = Post.objects.prefetch_related('candidates').all()
     session_countdown = 300
     return render(request, 'voting/election.html', {'posts': posts, 'session_countdown': session_countdown})
+
+import base64
+
+import base64
+
+@csrf_exempt
+def upload_template(request):
+    if request.method == 'POST':
+        try:
+            data = json.loads(request.body)
+            user_id = data.get('user_id')
+            template_b64 = data.get('template_hex')
+
+            print("📥 Received template for user_id:", user_id)
+            print("🧬 Template (first 100 chars):", template_b64[:100])
+
+            # Decode base64 string to bytes
+            template_bytes = base64.b64decode(template_b64)
+
+            # Convert bytes back to hex string if you want to store as hex text
+            template_hex = template_bytes.hex()
+
+            FingerprintTemplate.objects.create(
+                user_id=user_id,
+                template_hex=template_hex
+            )
+
+            return JsonResponse({'status': 'success'})
+        except Exception as e:
+            print("❌ Error:", str(e))
+            return JsonResponse({'status': 'error', 'message': str(e)}, status=400)
+    
+    return JsonResponse({'status': 'error', 'message': 'Only POST allowed'}, status=405)
