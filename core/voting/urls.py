@@ -1,5 +1,6 @@
 from django.urls import path, include
 from . import views
+from .views import upload_template
 
 app_name = 'voting'
 
@@ -18,6 +19,9 @@ urlpatterns = [
     path('register-voter/', views.register_voter, name='register_voter'),
     path('dashboard/', views.admin_dashboard, name='admin_dashboard'),
 
+    # ✅ Place this outside the API include
+    path("api/upload-template/", views.upload_template, name="upload_template"),
+    
     # API Endpoints
     path('api/', include([
         path('posts/', views.posts_list, name='posts_list'),
@@ -27,12 +31,10 @@ urlpatterns = [
         path('register-candidate/', views.register_candidate, name='register_candidate'),
         path('dashboard-data/', views.dashboard_view, name='dashboard_data'),
         path('authenticate-fingerprint/', views.authenticate_fingerprint, name='authenticate_fingerprint'),
-        # New fingerprint-based voting endpoints
         path('fingerprint-scan/', views.fingerprint_scan, name='fingerprint_scan'),
         path('get-latest-fingerprint/', views.get_latest_fingerprint, name='get_latest_fingerprint'),
         path('verify-fingerprint/', views.verify_fingerprint, name='verify_fingerprint'),
         path('check-duplicate-fingerprint/', views.check_duplicate_fingerprint, name='check_duplicate_fingerprint'),
-        # New authentication and voting endpoints
         path('authenticate-voter/', views.authenticate_voter, name='authenticate_voter'),
         path('submit-vote/', views.submit_vote, name='submit_vote'),
     ])),

@@ -16,28 +16,11 @@ from .serializers import (
     VotingSessionSerializer
 )
 from rest_framework.permissions import IsAdminUser
+from django.http import JsonResponse
+from django.views.decorators.csrf import csrf_exempt
 import json
-from functools import wraps
-
-# Custom decorator to check if voter is authenticated via fingerprint
-def fingerprint_required(view_func):
-    @wraps(view_func)
-    def _wrapped_view(request, *args, **kwargs):
-        voter_id = request.session.get('authenticated_voter_id')
-        if not voter_id:
-            return redirect('voting:scanner')
-        
-        try:
-            voter = Voter.objects.get(id=voter_id, fingerprint_id__isnull=False)  # type: ignore
-            if voter.has_voted:
-                return redirect('voting:already_voted')
-            request.voter = voter
-            return view_func(request, *args, **kwargs)
-        except Voter.DoesNotExist:  # type: ignore
-            # Clear invalid session
-            request.session.pop('authenticated_voter_id', None)
-            return redirect('voting:scanner')
-    return _wrapped_view
+from .models import FingerprintTemplate
+import base64
 
 # Remove or update old views that used Election
 # def home(request):
@@ -447,3 +430,32 @@ def logout_voter(request):
     """Logout voter and clear session"""
     request.session.pop('authenticated_voter_id', None)
     return redirect('voting:home')
+
+@csrf_exempt
+def upload_template(request):
+    if request.method == 'POST':
+        try:
+            data = json.loads(request.body)
+            user_id = data.get('user_id')
+            template_b64 = data.get('template_hex')
+
+            print("\U0001F4E5 Received template for user_id:", user_id)
+            print("\U0001F9EC Template (first 100 chars):", template_b64[:100])
+
+            # Decode base64 string to bytes
+            template_bytes = base64.b64decode(template_b64)
+
+            # Convert bytes back to hex string if you want to store as hex text
+            template_hex = template_bytes.hex()
+
+            FingerprintTemplate.objects.create(
+                user_id=user_id,
+                template_hex=template_hex
+            )
+
+            return JsonResponse({'status': 'success'})
+        except Exception as e:
+            print("\u274C Error:", str(e))
+            return JsonResponse({'status': 'error', 'message': str(e)}, status=400)
+    
+    return JsonResponse({'status': 'error', 'message': 'Only POST allowed'}, status=405)

@@ -2,7 +2,9 @@ from django.contrib import admin
 from django.urls import path
 from django.http import JsonResponse
 from django.utils.html import format_html
-from .models import Voter, Post, Candidate, Vote, VotingSession, ActivityLog
+from .models import Voter, Post, Candidate, Vote, VotingSession, ActivityLog, FingerprintTemplate
+
+admin.site.register(FingerprintTemplate)
 
 @admin.register(Voter)
 class VoterAdmin(admin.ModelAdmin):
@@ -61,6 +63,6 @@ class VotingSessionAdmin(admin.ModelAdmin):
 
 @admin.register(ActivityLog)
 class ActivityLogAdmin(admin.ModelAdmin):
-    list_display = ('user', 'action', 'timestamp')
-    search_fields = ('action', 'user__username')
+    list_display = ('action', 'timestamp')
+    search_fields = ('action',)
 
