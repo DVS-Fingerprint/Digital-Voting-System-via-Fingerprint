@@ -81,17 +81,6 @@ def home(request):
     return render(request, 'voting/home.html')
 
 def voter_home(request):
-    # voter_id = request.session.get('authenticated_voter_id')
-    # if not voter_id:
-    #     return redirect('voting:scanner')
-    # try:
-    #     voter = Voter.objects.get(id=voter_id)  # type: ignore
-    #     if voter.has_voted:
-    #         return redirect('voting:already_voted')
-    #     return render(request, 'voting/voter_home.html', {'voter': voter})
-    # except Voter.DoesNotExist:  # type: ignore
-    #     request.session.pop('authenticated_voter_id', None)
-    #     return redirect('voting:scanner')
     # For development, just show the page without auth
     return render(request, 'voting/voter_home.html')
 
@@ -297,7 +286,8 @@ def verify_fingerprint(request):
         return JsonResponse({'error': str(e)}, status=500)
 
 def scanner(request):
-    return render(request, 'voting/scanner.html')
+    # For development, auto-redirect to voter_home
+    return redirect('voting:voter_home')
 
 # @fingerprint_required
 def election_view(request):
