@@ -1,11 +1,9 @@
 from django.db import models
-from django.contrib.auth.models import User
 
-# Create your models here.
 class VotingSession(models.Model):
     start_time = models.DateTimeField()
     end_time = models.DateTimeField()
-    is_active = models.BooleanField(default=False)  # type: ignore
+    is_active = models.BooleanField(default=False)
 
     def __str__(self):
         return f"Session: {self.start_time} - {self.end_time} ({'Active' if self.is_active else 'Inactive'})"
@@ -20,7 +18,7 @@ class Voter(models.Model):
     name = models.CharField(max_length=255)
     email = models.EmailField(unique=True)
     fingerprint_id = models.CharField(max_length=100, unique=True, null=True, blank=True)
-    has_voted = models.BooleanField(default=False)  # type: ignore
+    has_voted = models.BooleanField(default=False)
     last_vote_attempt = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -35,7 +33,7 @@ class Candidate(models.Model):
     post = models.ForeignKey(Post, on_delete=models.CASCADE, related_name='candidates')
 
     def __str__(self):
-        return f"{self.name} ({self.post.title})"  # type: ignore
+        return f"{self.name} ({self.post.title})"
 
 class Vote(models.Model):
     voter = models.ForeignKey(Voter, on_delete=models.CASCADE)
@@ -44,19 +42,26 @@ class Vote(models.Model):
     timestamp = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
-        return f"{self.voter.name} voted for {self.candidate.name} ({self.post.title})"  # type: ignore
+        return f"{self.voter.name} voted for {self.candidate.name} ({self.post.title})"
 
 class ActivityLog(models.Model):
     timestamp = models.DateTimeField(auto_now_add=True)
     action = models.CharField(max_length=255)
+
     def __str__(self):
         return f"{self.timestamp}: {self.action}"
-    
+
 class FingerprintTemplate(models.Model):
-    user_id = models.IntegerField()
+    voter = models.ForeignKey(Voter, on_delete=models.CASCADE, null=True, blank=True)  # allow nulls for now
     template_hex = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
-        return f"User {self.user_id} - Template at {self.created_at}"
+        return f"Fingerprint Template for {self.voter.name if self.voter else 'Unknown'} at {self.created_at}"
 
+class ScanTrigger(models.Model):
+    voter_id = models.IntegerField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Scan trigger for voter {self.voter_id} at {self.created_at}"

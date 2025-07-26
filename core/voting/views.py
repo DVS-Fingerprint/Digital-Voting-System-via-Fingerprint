@@ -1,53 +1,28 @@
 from django.shortcuts import render, get_object_or_404, redirect
-from .models import Candidate, Voter, Vote, Post, VotingSession
 from django.utils import timezone
 from django.http import HttpResponse, HttpResponseRedirect, JsonResponse
 from django.contrib.admin.views.decorators import staff_member_required
 from django.db.models import Count
-from .forms import VoterRegistrationForm
-from rest_framework import status, permissions, generics, views
-from rest_framework.response import Response
-from rest_framework.decorators import api_view, permission_classes, authentication_classes
-from django.contrib.auth.decorators import login_required
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
+from rest_framework import status, permissions, generics, views
+from rest_framework.response import Response
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAdminUser
+import json
+import base64
+from django.utils.timezone import now
+from .matcher import match_templates
+from .forms import VoterRegistrationForm
 from .serializers import (
     VoterSerializer, PostSerializer, CandidateSerializer, VoteSerializer,
     VotingSessionSerializer
 )
-from rest_framework.permissions import IsAdminUser
-from django.http import JsonResponse
-from django.views.decorators.csrf import csrf_exempt
-import json
-from .models import FingerprintTemplate
-import base64
+from .models import ScanTrigger
+from django.views.decorators.http import require_GET
+# Import models once here, consistently relative import
+from .models import Candidate, Voter, Vote, Post, VotingSession, FingerprintTemplate
 
-# Remove or update old views that used Election
-# def home(request):
-#     elections = Election.objects.filter(is_active=True)
-#     return render(request, 'voting/home.html', {'elections': elections})
-
-# def election(request, election_id):
-#     election = get_object_or_404(Election, id=election_id)
-#     candidates = Candidate.objects.filter(election=election)
-#     return render(request, 'voting/election.html', {'election': election, 'candidates': candidates})
-
-# def vote(request, candidate_id):
-#     # Simulate voter identification (replace with fingerprint auth later)
-#     voter = Voter.objects.first()  # Just picking first voter for now - to be updated
-#     candidate = get_object_or_404(Candidate, id=candidate_id)
-#     # Check if voter has already voted
-#     if voter.has_voted:
-#         return HttpResponse("You have already voted!")
-#     # Create vote
-#     Vote.objects.create(voter=voter, candidate=candidate)
-#     voter.has_voted = True
-#     voter.save()
-#     return HttpResponse(f"Thanks for voting for {candidate.name}!")
-
-# def live_results(request):
-#     candidates = Candidate.objects.all()
-#     return render(request, 'results.html', {'candidates': candidates})
 
 @staff_member_required
 def register_voter(request):
@@ -62,13 +37,13 @@ def register_voter(request):
         form = VoterRegistrationForm()
     return render(request, 'voting/register_voter.html', {'form': form, 'success': success})
 
+
 @staff_member_required
 def admin_dashboard(request):
-    total_voters = Voter.objects.count()  # type: ignore
-    total_candidates = Candidate.objects.count()  # type: ignore
-    total_votes = Vote.objects.count()  # type: ignore
-    # Vote counts by candidate
-    vote_counts = Candidate.objects.annotate(num_votes=Count('vote')).order_by('-num_votes')  # type: ignore
+    total_voters = Voter.objects.count()
+    total_candidates = Candidate.objects.count()
+    total_votes = Vote.objects.count()
+    vote_counts = Candidate.objects.annotate(num_votes=Count('vote')).order_by('-num_votes')
     context = {
         'total_voters': total_voters,
         'total_candidates': total_candidates,
@@ -77,87 +52,81 @@ def admin_dashboard(request):
     }
     return render(request, 'voting/admin_dashboard.html', context)
 
+
 def home(request):
     return render(request, 'voting/home.html')
 
+
 def voter_home(request):
-    # voter_id = request.session.get('authenticated_voter_id')
-    # if not voter_id:
-    #     return redirect('voting:scanner')
-    # try:
-    #     voter = Voter.objects.get(id=voter_id)  # type: ignore
-    #     if voter.has_voted:
-    #         return redirect('voting:already_voted')
-    #     return render(request, 'voting/voter_home.html', {'voter': voter})
-    # except Voter.DoesNotExist:  # type: ignore
-    #     request.session.pop('authenticated_voter_id', None)
-    #     return redirect('voting:scanner')
-    # For development, just show the page without auth
     return render(request, 'voting/voter_home.html')
 
+
 def candidate_list(request):
-    posts = Post.objects.all()  # type: ignore
+    posts = Post.objects.all()
     return render(request, 'voting/candidate_list.html', {'posts': posts})
+
 
 @api_view(['GET'])
 def posts_list(request):
-    posts = Post.objects.all()  # type: ignore
+    posts = Post.objects.all()
     serializer = PostSerializer(posts, many=True)
     return Response(serializer.data)
+
 
 @api_view(['GET'])
 def candidates_list(request):
     post_id = request.GET.get('post_id')
-    candidates = Candidate.objects.all()  # type: ignore
+    candidates = Candidate.objects.all()
     if post_id:
         candidates = candidates.filter(post_id=post_id)
     serializer = CandidateSerializer(candidates, many=True)
     return Response(serializer.data)
 
+
 @api_view(['POST'])
 def vote_view(request):
-    """Accepts fingerprint_id and selected candidate IDs, stores vote."""
     fingerprint_id = request.data.get('fingerprint_id')
     votes = request.data.get('votes')  # [{post: id, candidate: id}]
     try:
-        voter = Voter.objects.get(fingerprint_id=fingerprint_id)  # type: ignore
+        voter = Voter.objects.get(fingerprint_id=fingerprint_id)
         if voter.has_voted:
             return Response({'detail': 'Already voted.'}, status=400)
-        # Check voting session
-        session = VotingSession.objects.filter(is_active=True).first()  # type: ignore
+        session = VotingSession.objects.filter(is_active=True).first()
         if not session:
             return Response({'detail': 'Voting is not active.'}, status=403)
         for vote_item in votes:
             post_id = vote_item['post']
             candidate_id = vote_item['candidate']
-            post = Post.objects.get(id=post_id)  # type: ignore
-            candidate = Candidate.objects.get(id=candidate_id, post=post)  # type: ignore
-            Vote.objects.create(voter=voter, candidate=candidate, post=post)  # type: ignore
+            post = Post.objects.get(id=post_id)
+            candidate = Candidate.objects.get(id=candidate_id, post=post)
+            Vote.objects.create(voter=voter, candidate=candidate, post=post)
         voter.has_voted = True
         voter.last_vote_attempt = timezone.now()
         voter.save()
         return Response({'detail': 'Vote cast successfully.', 'name': voter.name, 'timestamp': voter.last_vote_attempt})
-    except Voter.DoesNotExist:  # type: ignore
+    except Voter.DoesNotExist:
         return Response({'detail': 'Voter not found.'}, status=404)
     except Exception as e:
         return Response({'detail': str(e)}, status=400)
 
+
 @api_view(['GET'])
 @permission_classes([IsAdminUser])
 def results_view(request):
-    posts = Post.objects.all()  # type: ignore
+    posts = Post.objects.all()
     results = []
     for post in posts:
-        candidates = Candidate.objects.filter(post=post)  # type: ignore
+        candidates = Candidate.objects.filter(post=post)
         candidate_results = []
         for candidate in candidates:
-            votes = Vote.objects.filter(candidate=candidate).count()  # type: ignore
+            votes = Vote.objects.filter(candidate=candidate).count()
             candidate_results.append({
                 'candidate': CandidateSerializer(candidate).data,
                 'votes': votes
             })
         results.append({'post': PostSerializer(post).data, 'candidates': candidate_results})
     return Response(results)
+
 
 @api_view(['POST'])
 @permission_classes([IsAdminUser])
@@ -168,13 +137,14 @@ def register_candidate(request):
         return Response(serializer.data, status=201)
     return Response(serializer.errors, status=400)
 
+
 @api_view(['GET'])
 @permission_classes([IsAdminUser])
 def dashboard_view(request):
-    total_voters = Voter.objects.count()  # type: ignore
-    total_votes = Vote.objects.count()  # type: ignore
-    total_candidates = Candidate.objects.count()  # type: ignore
-    session = VotingSession.objects.filter(is_active=True).first()  # type: ignore
+    total_voters = Voter.objects.count()
+    total_votes = Vote.objects.count()
+    total_candidates = Candidate.objects.count()
+    session = VotingSession.objects.filter(is_active=True).first()
     data = {
         'total_voters': total_voters,
         'total_votes': total_votes,
@@ -183,32 +153,27 @@ def dashboard_view(request):
     }
     return Response(data)
 
+
 @api_view(['POST'])
 def authenticate_fingerprint(request):
-    """ESP32 sends fingerprint_id, returns voter status."""
     fingerprint_id = request.data.get('fingerprint_id')
     try:
-        voter = Voter.objects.get(fingerprint_id=fingerprint_id)  # type: ignore
+        voter = Voter.objects.get(fingerprint_id=fingerprint_id)
         if voter.has_voted:
             return Response({'status': 'already_voted', 'name': voter.name}, status=200)
         return Response({'status': 'ok', 'name': voter.name}, status=200)
-    except Voter.DoesNotExist:  # type: ignore
+    except Voter.DoesNotExist:
         return Response({'status': 'not_found'}, status=404)
 
-# Simplified fingerprint API endpoints
 
 @csrf_exempt
 @require_http_methods(["POST"])
 def fingerprint_scan(request):
-    """Receive fingerprint ID from ESP32 - simplified version"""
     try:
         data = json.loads(request.body)
         fingerprint_id = data.get('fingerprint_id')
-        
         if not fingerprint_id:
             return JsonResponse({'error': 'fingerprint_id is required'}, status=400)
-        
-        # Just acknowledge receipt - no storage needed
         return JsonResponse({
             'status': 'success',
             'message': 'Fingerprint scan received',
@@ -219,20 +184,16 @@ def fingerprint_scan(request):
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
 
+
 @csrf_exempt
 @require_http_methods(["POST"])
 def check_duplicate_fingerprint(request):
-    """Check if fingerprint ID already exists in database"""
     try:
         data = json.loads(request.body)
         fingerprint_id = data.get('fingerprint_id')
-        
         if not fingerprint_id:
             return JsonResponse({'error': 'fingerprint_id is required'}, status=400)
-        
-        # Check if fingerprint ID already exists
-        is_duplicate = Voter.objects.filter(fingerprint_id=fingerprint_id).exists()  # type: ignore
-        
+        is_duplicate = Voter.objects.filter(fingerprint_id=fingerprint_id).exists()
         return JsonResponse({
             'status': 'success',
             'is_duplicate': is_duplicate,
@@ -243,32 +204,27 @@ def check_duplicate_fingerprint(request):
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
 
+
 @csrf_exempt
 @require_http_methods(["GET"])
 def get_latest_fingerprint(request):
-    """Get the most recent fingerprint scan for admin form auto-fill"""
-    # For simplicity, return a placeholder - in real implementation,
-    # you might want to store this temporarily or use a different approach
     return JsonResponse({
         'status': 'no_scan',
         'fingerprint_id': None,
         'message': 'Fingerprint scanning simplified - enter ID manually'
     })
 
+
 @csrf_exempt
 @require_http_methods(["POST"])
 def verify_fingerprint(request):
-    """Verify fingerprint ID and return voter status with redirect URL"""
     try:
         data = json.loads(request.body)
         fingerprint_id = data.get('fingerprint_id')
-        
         if not fingerprint_id:
             return JsonResponse({'error': 'fingerprint_id is required'}, status=400)
-        
         try:
-            voter = Voter.objects.get(fingerprint_id=fingerprint_id)  # type: ignore
-            
+            voter = Voter.objects.get(fingerprint_id=fingerprint_id)
             if voter.has_voted:
                 return JsonResponse({
                     'status': 'already_voted',
@@ -281,155 +237,129 @@ def verify_fingerprint(request):
                     'status': 'verified',
                     'message': 'Voter verified successfully',
                     'voter_name': voter.name,
-                    'redirect_url': '/voting/vote/'  # URL to voting interface
+                    'redirect_url': '/voting/vote/'
                 })
-                
-        except Voter.DoesNotExist:  # type: ignore
+        except Voter.DoesNotExist:
             return JsonResponse({
                 'status': 'not_found',
                 'message': 'Voter not found with this fingerprint ID',
                 'redirect_url': None
             })
-            
     except json.JSONDecodeError:
         return JsonResponse({'error': 'Invalid JSON'}, status=400)
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
 
+
 def scanner(request):
     return render(request, 'voting/scanner.html')
 
-# @fingerprint_required
+
 def election_view(request):
-    posts = Post.objects.prefetch_related('candidates').all()  # type: ignore
+    posts = Post.objects.prefetch_related('candidates').all()
     if request.method == 'POST':
-        # Logic to handle vote submission will go here
         return redirect('voting:thankyou')
     return render(request, 'voting/election.html', {'posts': posts})
 
+
 def thankyou(request):
-    # Example: show choices summary (replace with real logic)
     choices = request.session.get('choices', [])
     return render(request, 'voting/confirmation.html', {'choices': choices})
 
+
 def already_voted(request):
-    """Show message when voter has already voted"""
     voter_id = request.session.get('authenticated_voter_id')
     voter = None
     if voter_id:
         try:
-            voter = Voter.objects.get(id=voter_id)  # type: ignore
-        except Voter.DoesNotExist:  # type: ignore
+            voter = Voter.objects.get(id=voter_id)
+        except Voter.DoesNotExist:
             pass
     return render(request, 'voting/already_voted.html', {'voter': voter})
 
+
 def dashboard(request):
-    # This view is being deprecated in favor of the new flow.
-    # It will be removed once the transition is complete.
     from .models import Post
-    posts = Post.objects.prefetch_related('candidates').all()  # type: ignore
+    posts = Post.objects.prefetch_related('candidates').all()
     session_countdown = 300
     return render(request, 'voting/election.html', {'posts': posts, 'session_countdown': session_countdown})
+
 
 @csrf_exempt
 @require_http_methods(["POST"])
 def authenticate_voter(request):
-    """Authenticate voter via fingerprint and create session"""
     try:
         data = json.loads(request.body)
         fingerprint_id = data.get('fingerprint_id')
-        
         if not fingerprint_id:
             return JsonResponse({'error': 'fingerprint_id is required'}, status=400)
-        
         try:
-            voter = Voter.objects.get(fingerprint_id=fingerprint_id)  # type: ignore
-            
+            voter = Voter.objects.get(fingerprint_id=fingerprint_id)
             if voter.has_voted:
                 return JsonResponse({
                     'status': 'already_voted',
                     'message': 'You have already voted',
                     'voter_name': voter.name
                 })
-            
-            # Create session for authenticated voter
             request.session['authenticated_voter_id'] = voter.id
             request.session.modified = True
-            
             return JsonResponse({
                 'status': 'authenticated',
                 'message': 'Voter authenticated successfully',
                 'voter_name': voter.name,
                 'redirect_url': '/voting/vote/'
             })
-                
-        except Voter.DoesNotExist:  # type: ignore
+        except Voter.DoesNotExist:
             return JsonResponse({
                 'status': 'not_found',
                 'message': 'Voter not found with this fingerprint ID'
             })
-            
     except json.JSONDecodeError:
         return JsonResponse({'error': 'Invalid JSON'}, status=400)
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
 
-# @fingerprint_required
+
+@csrf_exempt
+@require_http_methods(["POST"])
 def submit_vote(request):
-    """Submit vote with authentication check"""
     if request.method != 'POST':
         return JsonResponse({'error': 'POST method required'}, status=405)
-    
     try:
         data = json.loads(request.body)
         votes = data.get('votes', [])
-        
         if not votes:
             return JsonResponse({'error': 'No votes provided'}, status=400)
-        
-        # Check voting session
-        session = VotingSession.objects.filter(is_active=True).first()  # type: ignore
+        session = VotingSession.objects.filter(is_active=True).first()
         if not session:
             return JsonResponse({'error': 'Voting is not active'}, status=403)
-        
-        # Record votes (simulate, no voter check)
         for vote_item in votes:
             post_id = vote_item.get('post')
             candidate_id = vote_item.get('candidate')
-            
             if not post_id or not candidate_id:
                 continue
-                
             try:
-                post = Post.objects.get(id=post_id)  # type: ignore
-                candidate = Candidate.objects.get(id=candidate_id, post=post)  # type: ignore
-                Vote.objects.create(candidate=candidate, post=post)  # type: ignore
-            except (Post.DoesNotExist, Candidate.DoesNotExist):  # type: ignore
+                post = Post.objects.get(id=post_id)
+                candidate = Candidate.objects.get(id=candidate_id, post=post)
+                Vote.objects.create(candidate=candidate, post=post)
+            except (Post.DoesNotExist, Candidate.DoesNotExist):
                 continue
-        
-        # Mark voter as voted
-        # request.voter.has_voted = True # This line is removed as voter is not authenticated
-        # request.voter.last_vote_attempt = timezone.now() # This line is removed as voter is not authenticated
-        # request.voter.save() # This line is removed as voter is not authenticated
-        
-        # Clear session
         request.session.pop('authenticated_voter_id', None)
-        
         return JsonResponse({
             'status': 'success',
             'message': 'Vote submitted successfully',
-            'voter_name': None # No voter name available without authentication
+            'voter_name': None
         })
-        
     except json.JSONDecodeError:
         return JsonResponse({'error': 'Invalid JSON'}, status=400)
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
 
+
 def logout_voter(request):
-    """Logout voter and clear session"""
     request.session.pop('authenticated_voter_id', None)
     return redirect('voting:home')
+
 
 @csrf_exempt
 def upload_template(request):
@@ -438,24 +368,78 @@ def upload_template(request):
             data = json.loads(request.body)
             user_id = data.get('user_id')
             template_b64 = data.get('template_hex')
-
             print("\U0001F4E5 Received template for user_id:", user_id)
             print("\U0001F9EC Template (first 100 chars):", template_b64[:100])
-
-            # Decode base64 string to bytes
             template_bytes = base64.b64decode(template_b64)
-
-            # Convert bytes back to hex string if you want to store as hex text
             template_hex = template_bytes.hex()
-
             FingerprintTemplate.objects.create(
                 user_id=user_id,
                 template_hex=template_hex
             )
-
             return JsonResponse({'status': 'success'})
         except Exception as e:
             print("\u274C Error:", str(e))
             return JsonResponse({'status': 'error', 'message': str(e)}, status=400)
-    
     return JsonResponse({'status': 'error', 'message': 'Only POST allowed'}, status=405)
+
+
+def match_template(request):
+    try:
+        data = json.loads(request.body)
+        template_b64 = data.get('template')
+
+        if not template_b64:
+            return JsonResponse({'status': 'error', 'message': 'No template provided'}, status=400)
+
+        incoming_template = base64.b64decode(template_b64)
+
+        all_templates = FingerprintTemplate.objects.select_related('voter').all()
+
+        for record in all_templates:
+            db_template_bytes = bytes.fromhex(record.template_hex)
+            match_score = match_templates(incoming_template, db_template_bytes)
+
+            if match_score > 50:
+                voter = record.voter
+                if voter is None:
+                    continue  # skip if no voter linked (defensive)
+
+                if voter.has_voted:
+                    return JsonResponse({
+                        'status': 'already_voted',
+                        'voter_name': voter.name
+                    })
+
+                voter.has_voted = True
+                voter.last_vote_attempt = now()
+                voter.save()
+
+                return JsonResponse({
+                    'status': 'authenticated',
+                    'voter_name': voter.name,
+                    'redirect_url': '/voting/vote/'
+                })
+
+        return JsonResponse({'status': 'not_found'})
+
+    except Exception as e:
+        return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
+
+def trigger_scan(request):
+    if request.method == 'POST':
+        data = json.loads(request.body)
+        voter_id = data.get('voter_id')
+        if voter_id is None:
+            return JsonResponse({'error': 'voter_id required'}, status=400)
+        ScanTrigger.objects.create(voter_id=voter_id)
+        return JsonResponse({'message': f'Scan triggered for voter {voter_id}'})
+    return JsonResponse({'error': 'POST method only'}, status=405)
+
+def get_scan_trigger(request):
+    trigger = ScanTrigger.objects.first()
+    if trigger:
+        voter_id = trigger.voter_id
+        trigger.delete()  # remove it so it's used only once
+        return JsonResponse({'user_id': voter_id})
+    else:
+        return JsonResponse({'user_id': -1})

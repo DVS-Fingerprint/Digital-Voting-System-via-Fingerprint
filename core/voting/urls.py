@@ -1,6 +1,6 @@
 from django.urls import path, include
 from . import views
-from .views import upload_template
+from .views import upload_template, match_template
 
 app_name = 'voting'
 
@@ -19,9 +19,12 @@ urlpatterns = [
     path('register-voter/', views.register_voter, name='register_voter'),
     path('dashboard/', views.admin_dashboard, name='admin_dashboard'),
 
-    # ✅ Place this outside the API include
+    # ✅ Place these outside the API include
     path("api/upload-template/", views.upload_template, name="upload_template"),
-    
+    path("api/match-template/", views.match_template, name="match_template"),  # ✅ NEWLY ADDED
+    path('api/trigger-scan/', views.trigger_scan, name='trigger-scan'),
+    path('api/scan-trigger/', views.get_scan_trigger, name='get-scan-trigger'),
+   
     # API Endpoints
     path('api/', include([
         path('posts/', views.posts_list, name='posts_list'),
