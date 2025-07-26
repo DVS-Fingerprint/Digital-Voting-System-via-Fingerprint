@@ -17,15 +17,17 @@ class Post(models.Model):
         return self.title
 
 class Voter(models.Model):
+    voter_id = models.CharField(max_length=50, unique=True)
     name = models.CharField(max_length=255)
-    email = models.EmailField(unique=True)
     fingerprint_id = models.CharField(max_length=100, unique=True, null=True, blank=True)
     has_voted = models.BooleanField(default=False)  # type: ignore
     last_vote_attempt = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
-
+    # Optionally add age and gender
+    age = models.PositiveIntegerField(null=True, blank=True)
+    gender = models.CharField(max_length=10, null=True, blank=True)
     def __str__(self):
-        return f"{self.name} ({self.email})"
+        return f"{self.name} (Voter ID: {self.voter_id})"
 
 class Candidate(models.Model):
     name = models.CharField(max_length=100)
@@ -53,10 +55,10 @@ class ActivityLog(models.Model):
         return f"{self.timestamp}: {self.action}"
     
 class FingerprintTemplate(models.Model):
-    user_id = models.IntegerField()
+    voter = models.ForeignKey(Voter, on_delete=models.CASCADE)
     template_hex = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
-        return f"User {self.user_id} - Template at {self.created_at}"
+        return f"Voter {self.voter_id} - Template at {self.created_at}"
 

@@ -315,7 +315,7 @@ document.addEventListener('DOMContentLoaded', function() {
         submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Submitting...';
         submitBtn.disabled = true;
         // Submit votes via API
-        fetch('/voting/api/submit-vote/', {
+        fetch('/api/submit-vote/', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',

@@ -36,4 +36,17 @@ class ActivityLogSerializer(serializers.ModelSerializer):
     user = serializers.StringRelatedField()
     class Meta:
         model = ActivityLog
-        fields = ['id', 'user', 'action', 'timestamp', 'details'] 
+        fields = ['id', 'user', 'action', 'timestamp', 'details']
+
+class VoteRequestSerializer(serializers.Serializer):
+    votes = serializers.ListField(
+        child=serializers.DictField(
+            child=serializers.IntegerField(),
+        ),
+        allow_empty=False
+    )
+    def validate_votes(self, value):
+        for item in value:
+            if 'post' not in item or 'candidate' not in item:
+                raise serializers.ValidationError('Each vote must include post and candidate.')
+        return value 

@@ -1,6 +1,6 @@
 from django.urls import path, include
 from . import views
-from .views import upload_template
+from .views import upload_template, register_voter_with_fingerprint, fingerprint_authenticate
 
 app_name = 'voting'
 
@@ -38,4 +38,9 @@ urlpatterns = [
         path('authenticate-voter/', views.authenticate_voter, name='authenticate_voter'),
         path('submit-vote/', views.submit_vote, name='submit_vote'),
     ])),
+]
+
+urlpatterns += [
+    path('register_voter_with_fingerprint/', register_voter_with_fingerprint, name='register_voter_with_fingerprint'),
+    path('fingerprint_authenticate/', fingerprint_authenticate, name='fingerprint_authenticate'),
 ]

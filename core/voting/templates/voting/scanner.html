@@ -7,8 +7,11 @@
     <h4>{% trans "Fingerprint Verification" %}</h4>
     
     <div id="scan-status" class="my-5">
-        <i class="fas fa-fingerprint fingerprint-icon"></i>
-        <p class="lead text-muted">{% trans "Place your finger on the scanner" %}</p>
+        <i id="fingerprint-icon" class="fas fa-fingerprint fingerprint-icon"></i>
+        <div id="spinner" style="display:none; font-size:2.5rem; color:#0dcaf0;">
+            <i class="fas fa-spinner fa-spin"></i>
+        </div>
+        <p class="lead text-muted" id="scan-instruction">{% trans "Place your finger on the scanner" %}</p>
         <div class="progress" style="height: 6px;">
             <div id="scan-progress-bar" class="progress-bar bg-info" role="progressbar" style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
         </div>
@@ -28,7 +31,21 @@
 document.addEventListener('DOMContentLoaded', function() {
     const progressBar = document.getElementById('scan-progress-bar');
     const scanMessage = document.getElementById('scan-message');
+    const fingerprintIcon = document.getElementById('fingerprint-icon');
+    const spinner = document.getElementById('spinner');
+    const scanInstruction = document.getElementById('scan-instruction');
     let isScanning = false;
+
+    function showSpinner(message) {
+        fingerprintIcon.style.display = 'none';
+        spinner.style.display = 'block';
+        scanInstruction.textContent = message || 'Verifying...';
+    }
+    function hideSpinner() {
+        fingerprintIcon.style.display = 'block';
+        spinner.style.display = 'none';
+        scanInstruction.textContent = 'Place your finger on the scanner';
+    }
 
     // Function to simulate fingerprint scanning
     function startScan() {
@@ -45,7 +62,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
             if (progress >= 100) {
                 clearInterval(interval);
-                scanMessage.textContent = 'Verifying fingerprint...';
+                showSpinner('Verifying...');
                 
                 // Simulate fingerprint verification with ESP32
                 setTimeout(() => {
@@ -73,6 +90,7 @@ document.addEventListener('DOMContentLoaded', function() {
         })
         .then(response => response.json())
         .then(data => {
+            hideSpinner();
             if (data.status === 'authenticated') {
                 scanMessage.textContent = `Welcome, ${data.voter_name}! Redirecting...`;
                 progressBar.className = 'progress-bar bg-success';
@@ -98,8 +116,9 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         })
         .catch(error => {
-            console.error('Error:', error);
+            hideSpinner();
             scanMessage.textContent = 'Connection error. Please try again.';
+            console.error('Error:', error);
             progressBar.className = 'progress-bar bg-danger';
             isScanning = false;
         });

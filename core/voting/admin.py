@@ -8,8 +8,8 @@ admin.site.register(FingerprintTemplate)
 
 @admin.register(Voter)
 class VoterAdmin(admin.ModelAdmin):
-    list_display = ('name', 'email', 'fingerprint_id', 'has_voted', 'last_vote_attempt')
-    search_fields = ('name', 'email', 'fingerprint_id')
+    list_display = ('voter_id', 'name', 'fingerprint_id', 'age', 'gender', 'has_voted', 'last_vote_attempt')
+    search_fields = ('voter_id', 'name', 'fingerprint_id', 'age', 'gender')
     list_filter = ('has_voted', 'created_at')
     readonly_fields = ('created_at', 'last_vote_attempt')
     

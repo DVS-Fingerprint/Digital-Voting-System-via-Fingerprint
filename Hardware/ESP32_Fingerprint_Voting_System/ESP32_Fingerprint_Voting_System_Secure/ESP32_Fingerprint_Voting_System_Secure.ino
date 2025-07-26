@@ -151,7 +151,7 @@ void setupWiFi() {
     attempts++;
   }
   
-  if (WiFi.status() == WL_CONNECTED) {
+  if (WiFi.status() == WL_CONNECsTED) {
     wifiConnected = true;
     Serial.println();
     Serial.print("WiFi connected! IP address: ");
