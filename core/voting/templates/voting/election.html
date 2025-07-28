@@ -153,7 +153,7 @@
 </style>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    const totalSteps = {{ posts|length }};
+    const totalSteps = parseInt('{{ posts|length }}');
     let currentStep = 1;
     let votes = {};
     let voteSummary = {};
@@ -315,7 +315,7 @@ document.addEventListener('DOMContentLoaded', function() {
         submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Submitting...';
         submitBtn.disabled = true;
         // Submit votes via API
-        fetch('/api/submit-vote/', {
+        fetch('/voting/api/submit-vote/', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',

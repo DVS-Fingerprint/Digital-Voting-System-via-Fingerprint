@@ -41,6 +41,7 @@ document.addEventListener('DOMContentLoaded', function() {
         spinner.style.display = 'block';
         scanInstruction.textContent = message || 'Verifying...';
     }
+    
     function hideSpinner() {
         fingerprintIcon.style.display = 'block';
         spinner.style.display = 'none';
@@ -72,41 +73,43 @@ document.addEventListener('DOMContentLoaded', function() {
         }, 800);
     }
 
-    // Function to verify fingerprint with backend
+    // Function to verify fingerprint with backend using new similarity matching
     function verifyFingerprint() {
-        // In a real scenario, this would get the fingerprint ID from ESP32
-        // For demo purposes, we'll simulate with a test fingerprint ID
-        const testFingerprintId = 'test_fingerprint_123'; // Replace with actual ESP32 data
+        // In a real scenario, this would get the fingerprint template from ESP32
+        // For demo purposes, we'll simulate with a test template
+        // In production, this would be the actual template from ESP32
+        const testTemplateHex = 'test_template_hex_data'; // Replace with actual ESP32 template data
         
-        fetch('/voting/api/authenticate-voter/', {
+        fetch('/voting/api/scanner-authenticate/', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]')?.value || ''
             },
             body: JSON.stringify({
-                fingerprint_id: testFingerprintId
+                template_hex: testTemplateHex
             })
         })
         .then(response => response.json())
         .then(data => {
             hideSpinner();
-            if (data.status === 'authenticated') {
-                scanMessage.textContent = `Welcome, ${data.voter_name}! Redirecting...`;
+            if (data.status === 'ok') {
+                scanMessage.textContent = `Welcome, ${data.name}! Redirecting...`;
                 progressBar.className = 'progress-bar bg-success';
                 
+                // Set session for authenticated voter
                 setTimeout(() => {
-                    window.location.href = data.redirect_url;
+                    window.location.href = '/voting/voter-home/';
                 }, 1500);
             } else if (data.status === 'already_voted') {
-                scanMessage.textContent = `Hello ${data.voter_name}, you have already voted.`;
+                scanMessage.textContent = `Hello ${data.name}, you have already voted.`;
                 progressBar.className = 'progress-bar bg-warning';
                 
                 setTimeout(() => {
                     window.location.href = '/voting/already-voted/';
                 }, 2000);
             } else if (data.status === 'not_found') {
-                scanMessage.textContent = 'Fingerprint not registered. Please contact administrator.';
+                scanMessage.textContent = 'Fingerprint not recognized. Please contact administrator.';
                 progressBar.className = 'progress-bar bg-danger';
                 isScanning = false;
             } else {

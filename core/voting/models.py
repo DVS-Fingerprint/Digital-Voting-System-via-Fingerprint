@@ -60,5 +60,5 @@ class FingerprintTemplate(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
-        return f"Voter {self.voter_id} - Template at {self.created_at}"
+        return f"Voter {self.voter.voter_id} - Template at {self.created_at}"
 

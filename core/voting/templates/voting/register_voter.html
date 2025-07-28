@@ -2,12 +2,12 @@
 {% block title %}Register Voter | Digital Voting System{% endblock %}
 {% block content %}
 <div class="row justify-content-center">
-  <div class="col-lg-6 col-md-8 col-sm-12">
+  <div class="col-lg-8 col-md-10 col-sm-12">
     <div class="card shadow-lg border-0">
       <div class="card-header bg-primary text-white py-3">
         <div class="d-flex justify-content-between align-items-center">
           <h4 class="mb-0">
-            <i class="fas fa-user-plus me-2"></i>Register Voter
+            <i class="fas fa-user-plus me-2"></i>Register Voter with Fingerprint
           </h4>
           <a href="{% url 'voting:admin_dashboard' %}" class="btn btn-light btn-sm">
             <i class="fas fa-arrow-left me-1"></i> Back to Dashboard
@@ -17,12 +17,37 @@
       <div class="card-body p-4">
         {% if success %}
           <div class="alert alert-success alert-dismissible fade show" role="alert">
-            <i class="fas fa-check-circle me-2"></i>Voter registered successfully!
+            <i class="fas fa-check-circle me-2"></i>Voter registered successfully with fingerprint!
             <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
           </div>
         {% endif %}
         
-        <form method="post" novalidate class="needs-validation">
+        <!-- Fingerprint Scanning Section -->
+        <div class="alert alert-info mb-4">
+          <h6 class="alert-heading">
+            <i class="fas fa-fingerprint me-2"></i>Fingerprint Registration Process
+          </h6>
+          <ol class="mb-0">
+            <li>Voter ID is auto-generated and pre-filled</li>
+            <li>Fill in the voter details (name, age, gender)</li>
+            <li>Click "Start Fingerprint Scan" to trigger the ESP32 device</li>
+            <li>Place finger on the sensor when prompted</li>
+            <li>Fingerprint data will be automatically retrieved and populated</li>
+            <li>Click "Register Voter" to complete registration</li>
+          </ol>
+        </div>
+
+        <!-- Scan Status Display -->
+        <div id="scanStatus" class="alert alert-secondary mb-4" style="display: none;">
+          <div class="d-flex align-items-center">
+            <div class="spinner-border spinner-border-sm me-2" role="status">
+              <span class="visually-hidden">Scanning...</span>
+            </div>
+            <span id="scanStatusText">Waiting for fingerprint scan...</span>
+          </div>
+        </div>
+        
+        <form method="post" novalidate class="needs-validation" id="voterForm">
           {% csrf_token %}
           {% if form.non_field_errors %}
             <div class="alert alert-danger">
@@ -30,93 +55,123 @@
             </div>
           {% endif %}
           
-          <div class="mb-4">
-            <label for="{{ form.voter_id.id_for_label }}" class="form-label fw-bold">
-              <i class="fas fa-id-card me-2"></i>Voter ID
-            </label>
-            {{ form.voter_id }}
-            {% if form.voter_id.errors %}
-              <div class="invalid-feedback d-block">
-                {% for error in form.voter_id.errors %}
-                  <i class="fas fa-exclamation-circle me-1"></i>{{ error }}
-                {% endfor %}
+          <div class="row">
+            <div class="col-md-6">
+              <div class="mb-4">
+                <label for="{{ form.voter_id.id_for_label }}" class="form-label fw-bold">
+                  <i class="fas fa-id-card me-2"></i>Voter ID
+                </label>
+                {{ form.voter_id }}
+                <div class="form-text">
+                  <i class="fas fa-info-circle me-1"></i>Auto-generated sequential ID
+                </div>
+                {% if form.voter_id.errors %}
+                  <div class="invalid-feedback d-block">
+                    {% for error in form.voter_id.errors %}
+                      <i class="fas fa-exclamation-circle me-1"></i>{{ error }}
+                    {% endfor %}
+                  </div>
+                {% endif %}
               </div>
-            {% endif %}
-          </div>
-          <div class="mb-4">
-            <label for="{{ form.name.id_for_label }}" class="form-label fw-bold">
-              <i class="fas fa-user me-2"></i>Full Name
-            </label>
-            {{ form.name }}
-            {% if form.name.errors %}
-              <div class="invalid-feedback d-block">
-                {% for error in form.name.errors %}
-                  <i class="fas fa-exclamation-circle me-1"></i>{{ error }}
-                {% endfor %}
+            </div>
+            <div class="col-md-6">
+              <div class="mb-4">
+                <label for="{{ form.name.id_for_label }}" class="form-label fw-bold">
+                  <i class="fas fa-user me-2"></i>Full Name
+                </label>
+                {{ form.name }}
+                {% if form.name.errors %}
+                  <div class="invalid-feedback d-block">
+                    {% for error in form.name.errors %}
+                      <i class="fas fa-exclamation-circle me-1"></i>{{ error }}
+                    {% endfor %}
+                  </div>
+                {% endif %}
               </div>
-            {% endif %}
-          </div>
-          <div class="mb-4">
-            <label for="{{ form.fingerprint_id.id_for_label }}" class="form-label fw-bold">
-              <i class="fas fa-fingerprint me-2"></i>Fingerprint ID
-            </label>
-            {{ form.fingerprint_id }}
-            {% if form.fingerprint_id.errors %}
-              <div class="invalid-feedback d-block">
-                {% for error in form.fingerprint_id.errors %}
-                  <i class="fas fa-exclamation-circle me-1"></i>{{ error }}
-                {% endfor %}
-              </div>
-            {% endif %}
-            <div class="form-text">
-              <i class="fas fa-info-circle me-1"></i>Enter the unique fingerprint identifier
             </div>
           </div>
-          <div class="mb-4">
-            <label for="{{ form.age.id_for_label }}" class="form-label fw-bold">
-              <i class="fas fa-calendar me-2"></i>Age
-            </label>
-            {{ form.age }}
-            {% if form.age.errors %}
-              <div class="invalid-feedback d-block">
-                {% for error in form.age.errors %}
-                  <i class="fas fa-exclamation-circle me-1"></i>{{ error }}
-                {% endfor %}
+
+          <div class="row">
+            <div class="col-md-6">
+              <div class="mb-4">
+                <label for="{{ form.age.id_for_label }}" class="form-label fw-bold">
+                  <i class="fas fa-calendar me-2"></i>Age
+                </label>
+                {{ form.age }}
+                {% if form.age.errors %}
+                  <div class="invalid-feedback d-block">
+                    {% for error in form.age.errors %}
+                      <i class="fas fa-exclamation-circle me-1"></i>{{ error }}
+                    {% endfor %}
+                  </div>
+                {% endif %}
               </div>
-            {% endif %}
+            </div>
+            <div class="col-md-6">
+              <div class="mb-4">
+                <label for="{{ form.gender.id_for_label }}" class="form-label fw-bold">
+                  <i class="fas fa-venus-mars me-2"></i>Gender
+                </label>
+                {{ form.gender }}
+                {% if form.gender.errors %}
+                  <div class="invalid-feedback d-block">
+                    {% for error in form.gender.errors %}
+                      <i class="fas fa-exclamation-circle me-1"></i>{{ error }}
+                    {% endfor %}
+                  </div>
+                {% endif %}
+              </div>
+            </div>
           </div>
-          <div class="mb-4">
-            <label for="{{ form.gender.id_for_label }}" class="form-label fw-bold">
-              <i class="fas fa-venus-mars me-2"></i>Gender
-            </label>
-            {{ form.gender }}
-            {% if form.gender.errors %}
-              <div class="invalid-feedback d-block">
-                {% for error in form.gender.errors %}
-                  <i class="fas fa-exclamation-circle me-1"></i>{{ error }}
-                {% endfor %}
+
+          <!-- Fingerprint Section -->
+          <div class="card border-primary mb-4">
+            <div class="card-header bg-light">
+              <h6 class="mb-0">
+                <i class="fas fa-fingerprint me-2"></i>Fingerprint Registration
+              </h6>
+            </div>
+            <div class="card-body">
+              <div class="row">
+                <div class="col-md-8">
+                  <div class="mb-3">
+                    <label for="{{ form.template_hex.id_for_label }}" class="form-label fw-bold">
+                      <i class="fas fa-fingerprint me-2"></i>Fingerprint Template
+                    </label>
+                    {{ form.template_hex }}
+                    <div class="form-text">
+                      <i class="fas fa-info-circle me-1"></i>Fingerprint data will be automatically retrieved from ESP32
+                    </div>
+                    {% if form.template_hex.errors %}
+                      <div class="invalid-feedback d-block">
+                        {% for error in form.template_hex.errors %}
+                          <i class="fas fa-exclamation-circle me-1"></i>{{ error }}
+                        {% endfor %}
+                      </div>
+                    {% endif %}
+                  </div>
+                </div>
+                <div class="col-md-4">
+                  <div class="mb-3">
+                    <label class="form-label fw-bold">
+                      <i class="fas fa-cogs me-2"></i>Actions
+                    </label>
+                    <div class="d-grid gap-2">
+                      <button type="button" id="startScanBtn" class="btn btn-primary">
+                        <i class="fas fa-play me-2"></i>Start Fingerprint Scan
+                      </button>
+                      <button type="button" id="checkScanBtn" class="btn btn-info" style="display: none;">
+                        <i class="fas fa-sync me-2"></i>Check Scan Status
+                      </button>
+                    </div>
+                  </div>
+                </div>
               </div>
-            {% endif %}
-          </div>
-          <div class="mb-4">
-            <label for="{{ form.template_hex.id_for_label }}" class="form-label fw-bold">
-              <i class="fas fa-fingerprint me-2"></i>Fingerprint Template (Hex)
-            </label>
-            {{ form.template_hex }}
-            {% if form.template_hex.errors %}
-              <div class="invalid-feedback d-block">
-                {% for error in form.template_hex.errors %}
-                  <i class="fas fa-exclamation-circle me-1"></i>{{ error }}
-                {% endfor %}
-              </div>
-            {% endif %}
-            <div class="form-text">
-              <i class="fas fa-info-circle me-1"></i>Paste the fingerprint template hex data from the ESP32 device
             </div>
           </div>
           
           <div class="d-grid gap-2">
-            <button type="submit" class="btn btn-success btn-lg">
+            <button type="submit" class="btn btn-success btn-lg" id="registerBtn" {% if not has_pending_template %}disabled{% endif %}>
               <i class="fas fa-save me-2"></i>Register Voter
             </button>
           </div>
@@ -126,18 +181,115 @@
   </div>
 </div>
 {% endblock %}
+
 <script>
+let scanInterval;
+let currentVoterId = null;
+
 document.addEventListener('DOMContentLoaded', function() {
-    fetch('/voting/get_latest_fingerprint/')
+    const startScanBtn = document.getElementById('startScanBtn');
+    const checkScanBtn = document.getElementById('checkScanBtn');
+    const scanStatus = document.getElementById('scanStatus');
+    const scanStatusText = document.getElementById('scanStatusText');
+    const registerBtn = document.getElementById('registerBtn');
+    const templateField = document.getElementById('id_template_hex');
+    const voterIdField = document.getElementById('id_voter_id');
+
+    // Get the current voter ID from the form
+    currentVoterId = voterIdField.value;
+
+    startScanBtn.addEventListener('click', function() {
+        if (!currentVoterId) {
+            alert('Please ensure Voter ID is filled');
+            return;
+        }
+
+        // Trigger scan
+        fetch('/voting/api/trigger-scan/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+            },
+            body: JSON.stringify({
+                action: 'register',
+                voter_id: currentVoterId
+            })
+        })
         .then(response => response.json())
         .then(data => {
-            if (data.status === 'ok' && data.template_hex) {
-                const templateField = document.getElementById("id_template_hex");
-                if (templateField) {
-                    templateField.value = data.template_hex;
-                    templateField.readOnly = true; // Make the field read-only in the browser
-                }
+            if (data.status === 'success') {
+                startScanBtn.style.display = 'none';
+                checkScanBtn.style.display = 'block';
+                scanStatus.style.display = 'block';
+                scanStatusText.textContent = 'Scan triggered! Place finger on sensor...';
+                
+                // Start polling for scan completion
+                startScanPolling();
+            } else {
+                alert('Error: ' + data.error);
             }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Error triggering scan');
         });
+    });
+
+    checkScanBtn.addEventListener('click', function() {
+        checkScanStatus();
+    });
+
+    function startScanPolling() {
+        scanInterval = setInterval(checkScanStatus, 2000); // Check every 2 seconds
+    }
+
+    function checkScanStatus() {
+        fetch('/voting/api/get-scan-trigger/')
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'no_trigger' || data.status === 'expired') {
+                // Scan completed or expired, check for template
+                checkForTemplate();
+                clearInterval(scanInterval);
+                scanStatus.style.display = 'none';
+                startScanBtn.style.display = 'block';
+                checkScanBtn.style.display = 'none';
+            } else if (data.status === 'trigger_active') {
+                scanStatusText.textContent = 'Waiting for fingerprint scan...';
+            }
+        })
+        .catch(error => {
+            console.error('Error checking scan status:', error);
+        });
+    }
+
+    function checkForTemplate() {
+        // Check for pending template using the new endpoint
+        fetch('/voting/api/check-pending-template/')
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'success' && data.has_template) {
+                // Template found, populate the field
+                templateField.value = data.template_hex;
+                scanStatus.className = 'alert alert-success mb-4';
+                scanStatusText.innerHTML = '<i class="fas fa-check-circle me-2"></i>Fingerprint captured successfully!';
+                registerBtn.disabled = false;
+            } else {
+                scanStatus.className = 'alert alert-warning mb-4';
+                scanStatusText.innerHTML = '<i class="fas fa-exclamation-triangle me-2"></i>No fingerprint data received. Please try again.';
+            }
+        })
+        .catch(error => {
+            console.error('Error checking for template:', error);
+            scanStatus.className = 'alert alert-warning mb-4';
+            scanStatusText.innerHTML = '<i class="fas fa-exclamation-triangle me-2"></i>Error checking fingerprint data. Please try again.';
+        });
+    }
+
+    // Auto-check for existing template on page load
+    if (templateField && templateField.value) {
+        registerBtn.disabled = false;
+    }
 });
 </script>
