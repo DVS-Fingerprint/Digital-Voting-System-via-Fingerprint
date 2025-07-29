@@ -1,12 +1,14 @@
-from django.shortcuts import render
-from .models import Candidate, Voter, Vote, Post, VotingSession, FingerprintTemplate, ActivityLog
+from django.shortcuts import render, get_object_or_404, redirect
+from .models import Candidate, Voter, Vote, Post, VotingSession
 from django.utils import timezone
-from django.http import JsonResponse
+from django.http import HttpResponse, HttpResponseRedirect, JsonResponse
 from django.contrib.admin.views.decorators import staff_member_required
 from django.db.models import Count
 from .forms import VoterRegistrationForm
+from rest_framework import status, permissions, generics, views
 from rest_framework.response import Response
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view, permission_classes, authentication_classes
+from django.contrib.auth.decorators import login_required
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 from .serializers import (
@@ -14,78 +16,30 @@ from .serializers import (
     VotingSessionSerializer, VoteRequestSerializer
 )
 from rest_framework.permissions import IsAdminUser
+from django.http import JsonResponse
+from django.views.decorators.csrf import csrf_exempt
 import json
+from .models import FingerprintTemplate, ActivityLog
 import base64
-from .fingerprint_matcher import fingerprint_matcher
+from django.db import transaction
+from django.views.decorators.csrf import csrf_protect
 
 
 @staff_member_required
 def register_voter(request):
     success = False
-    
-    # Get the next available voter ID for display
-    last_voter = Voter.objects.order_by('-voter_id').first()
-    if last_voter:
-        try:
-            last_num = int(last_voter.voter_id.replace('V', ''))
-            next_voter_id = f"V{last_num + 1:06d}"
-        except ValueError:
-            next_voter_id = "V000001"
-    else:
-        next_voter_id = "V000001"
-    
     if request.method == 'POST':
         form = VoterRegistrationForm(request.POST)
         if form.is_valid():
-            # Auto-generate voter ID if not provided
-            if not form.cleaned_data.get('voter_id'):
-                form.instance.voter_id = next_voter_id
-            
             voter = form.save()
             template_hex = form.cleaned_data.get('template_hex')
             if template_hex:
-                # Check if fingerprint template already exists for this voter
-                FingerprintTemplate.objects.filter(voter=voter).delete()  # Remove old template
                 FingerprintTemplate.objects.create(voter=voter, template_hex=template_hex)
-                print(f"✅ Voter registered with fingerprint: {voter.name} (ID: {voter.voter_id})")
-                
-                # Clear pending template from session
-                request.session.pop('pending_template', None)
-                request.session.pop('pending_voter_id', None)
-            else:
-                print(f"⚠️ Voter registered without fingerprint: {voter.name} (ID: {voter.voter_id})")
-            
             success = True
             form = VoterRegistrationForm()  # Reset form after success
-            # Re-calculate next voter ID after successful registration
-            last_voter = Voter.objects.order_by('-voter_id').first()
-            if last_voter:
-                try:
-                    last_num = int(last_voter.voter_id.replace('V', ''))
-                    next_voter_id = f"V{last_num + 1:06d}"
-                except ValueError:
-                    next_voter_id = "V000001"
-            else:
-                next_voter_id = "V000001"
     else:
-        # Check for pending template in session
-        pending_template = request.session.get('pending_template')
-        pending_voter_id = request.session.get('pending_voter_id')
-        
-        initial_data = {'voter_id': next_voter_id}
-        if pending_template:
-            initial_data['template_hex'] = pending_template
-        
-        # Pre-fill the voter_id field with the next available ID
-        form = VoterRegistrationForm(initial=initial_data)
-    
-    context = {
-        'form': form, 
-        'success': success,
-        'next_voter_id': next_voter_id,
-        'has_pending_template': bool(request.session.get('pending_template'))
-    }
-    return render(request, 'voting/register_voter.html', context)
+        form = VoterRegistrationForm()
+    return render(request, 'voting/register_voter.html', {'form': form, 'success': success})
 
 @staff_member_required
 def admin_dashboard(request):
@@ -128,7 +82,6 @@ def candidates_list(request):
     serializer = CandidateSerializer(candidates, many=True)
     return Response(serializer.data)
 
-@csrf_exempt  # Required for ESP32 hardware POSTs (no CSRF token support)
 @api_view(['POST'])
 def vote_view(request):
     """Accepts selected candidate IDs, stores vote. Requires session-based authentication."""
@@ -189,7 +142,6 @@ def results_view(request):
         results.append({'post': PostSerializer(post).data, 'candidates': candidate_results})
     return Response(results)
 
-@csrf_exempt  # Required for ESP32 hardware POSTs (no CSRF token support)
 @api_view(['POST'])
 @permission_classes([IsAdminUser])
 def register_candidate(request):
@@ -214,45 +166,41 @@ def dashboard_view(request):
     }
     return Response(data)
 
-@csrf_exempt  # Required for ESP32 hardware POSTs (no CSRF token support)
 @api_view(['POST'])
 def authenticate_fingerprint(request):
-    """ESP32 sends fingerprint template, returns voter status using similarity matching."""
+    """ESP32 sends fingerprint_id, returns voter status."""
+    fingerprint_id = request.data.get('fingerprint_id')
     try:
-        template_hex = request.data.get('template_hex')
-        if not template_hex:
-            return Response({'error': 'template_hex is required'}, status=400)
-        
-        # Use similarity-based matching
-        match_result = fingerprint_matcher.find_best_match(template_hex)
-        
-        if match_result:
-            voter, confidence = match_result
-            print(f"✅ Fingerprint match found: {voter.name} (confidence: {confidence:.2f})")
-            
-            if voter.has_voted:
-                return Response({
-                    'status': 'already_voted', 
-                    'name': voter.name,
-                    'confidence': round(confidence, 3)
-                }, status=200)
-            else:
-                return Response({
-                    'status': 'ok', 
-                    'name': voter.name,
-                    'confidence': round(confidence, 3)
-                }, status=200)
-        else:
-            print("❌ No fingerprint match found")
-            return Response({'status': 'not_found'}, status=404)
-            
-    except Exception as e:
-        print(f"❌ Error in authenticate_fingerprint: {e}")
-        return Response({'error': str(e)}, status=500)
+        voter = Voter.objects.get(fingerprint_id=fingerprint_id)  # type: ignore
+        if voter.has_voted:
+            return Response({'status': 'already_voted', 'name': voter.name}, status=200)
+        return Response({'status': 'ok', 'name': voter.name}, status=200)
+    except Voter.DoesNotExist:  # type: ignore
+        return Response({'status': 'not_found'}, status=404)
 
 # Simplified fingerprint API endpoints
 
-
+@csrf_exempt  # Required for ESP32 hardware POSTs (no CSRF token support)
+@require_http_methods(["POST"])
+def fingerprint_scan(request):
+    """Receive fingerprint ID from ESP32 - simplified version"""
+    try:
+        data = json.loads(request.body)
+        fingerprint_id = data.get('fingerprint_id')
+        
+        if not fingerprint_id:
+            return JsonResponse({'error': 'fingerprint_id is required'}, status=400)
+        
+        # Just acknowledge receipt - no storage needed
+        return JsonResponse({
+            'status': 'success',
+            'message': 'Fingerprint scan received',
+            'fingerprint_id': fingerprint_id
+        })
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
 
 @csrf_exempt  # Required for ESP32 hardware POSTs (no CSRF token support)
 @require_http_methods(["POST"])
@@ -278,79 +226,65 @@ def check_duplicate_fingerprint(request):
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
 
+@csrf_exempt  # Required for ESP32 hardware GETs (no CSRF token support)
+@require_http_methods(["GET"])
+def get_latest_fingerprint(request):
+    """Get the most recent fingerprint scan for admin form auto-fill"""
+    latest = FingerprintTemplate.objects.order_by('-created_at').first()
+    if latest:
+        return JsonResponse({
+            'status': 'ok',
+            'fingerprint_id': latest.voter.fingerprint_id if latest.voter else None,
+            'template_hex': latest.template_hex,
+            'created_at': latest.created_at,
+        })
+    else:
+        return JsonResponse({
+            'status': 'no_scan',
+            'fingerprint_id': None,
+            'template_hex': None,
+            'message': 'No fingerprint scans found'
+        })
 
-
-@csrf_exempt  # Required for ESP32 hardware POSTs (no CSRF token support)
 @require_http_methods(["POST"])
 def verify_fingerprint(request):
-    """Verify if a fingerprint template matches a specific voter."""
+    """Verify fingerprint ID and return voter status with redirect URL"""
     try:
         data = json.loads(request.body)
-        template_hex = data.get('template_hex')
-        voter_id = data.get('voter_id')
+        fingerprint_id = data.get('fingerprint_id')
         
-        if not template_hex or not voter_id:
-            return JsonResponse({'error': 'Missing template_hex or voter_id.'}, status=400)
+        if not fingerprint_id:
+            return JsonResponse({'error': 'fingerprint_id is required'}, status=400)
         
-        # Verify fingerprint
-        is_match, confidence = fingerprint_matcher.verify_fingerprint(template_hex, voter_id)
-        
-        return JsonResponse({
-            'status': 'success',
-            'is_match': is_match,
-            'confidence': round(confidence, 3),
-            'threshold': fingerprint_matcher.similarity_threshold
-        })
-        
-    except Exception as e:
-        print(f"❌ Error in verify_fingerprint: {e}")
-        return JsonResponse({'error': str(e)}, status=500)
-
-@csrf_exempt  # Required for ESP32 hardware POSTs (no CSRF token support)
-@require_http_methods(["POST"])
-def match_fingerprint(request):
-    """Find all potential matches for a fingerprint template."""
-    try:
-        data = json.loads(request.body)
-        template_hex = data.get('template_hex')
-        min_confidence = data.get('min_confidence', 0.7)
-        
-        if not template_hex:
-            return JsonResponse({'error': 'Missing template_hex.'}, status=400)
-        
-        # Find multiple matches
-        matches = fingerprint_matcher.find_multiple_matches(template_hex, min_confidence)
-        
-        results = []
-        for voter, confidence in matches:
-            results.append({
-                'voter_id': voter.id,
-                'voter_name': voter.name,
-                'voter_id_display': voter.voter_id,
-                'has_voted': voter.has_voted,
-                'confidence': round(confidence, 3)
+        try:
+            voter = Voter.objects.get(fingerprint_id=fingerprint_id)  # type: ignore
+            
+            if voter.has_voted:
+                return JsonResponse({
+                    'status': 'already_voted',
+                    'message': 'Voter has already cast their vote',
+                    'voter_name': voter.name,
+                    'redirect_url': None
+                })
+            else:
+                return JsonResponse({
+                    'status': 'verified',
+                    'message': 'Voter verified successfully',
+                    'voter_name': voter.name,
+                    'redirect_url': '/voting/vote/'  # URL to voting interface
+                })
+                
+        except Voter.DoesNotExist:  # type: ignore
+            return JsonResponse({
+                'status': 'not_found',
+                'message': 'Voter not found with this fingerprint ID',
+                'redirect_url': None
             })
-        
-        return JsonResponse({
-            'status': 'success',
-            'matches': results,
-            'total_matches': len(results)
-        })
-        
+            
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Invalid JSON'}, status=400)
     except Exception as e:
-        print(f"❌ Error in match_fingerprint: {e}")
         return JsonResponse({'error': str(e)}, status=500)
-
-@api_view(['GET'])
-@permission_classes([IsAdminUser])
-def fingerprint_statistics(request):
-    """Get fingerprint matching statistics."""
-    try:
-        stats = fingerprint_matcher.get_template_statistics()
-        return Response(stats)
-    except Exception as e:
-        print(f"❌ Error getting fingerprint statistics: {e}")
-        return Response({'error': str(e)}, status=500)
 
 def scanner(request):
     # Render the scanner page for fingerprint verification
@@ -380,9 +314,14 @@ def already_voted(request):
             pass
     return render(request, 'voting/already_voted.html', {'voter': voter})
 
+def dashboard(request):
+    # This view is being deprecated in favor of the new flow.
+    # It will be removed once the transition is complete.
+    from .models import Post
+    posts = Post.objects.prefetch_related('candidates').all()  # type: ignore
+    session_countdown = 300
+    return render(request, 'voting/election.html', {'posts': posts, 'session_countdown': session_countdown})
 
-
-@csrf_exempt  # Required for ESP32 hardware POSTs (no CSRF token support)
 @require_http_methods(["POST"])
 def authenticate_voter(request):
     """Authenticate voter via fingerprint and create session"""
@@ -424,7 +363,6 @@ def authenticate_voter(request):
         ActivityLog.objects.create(action=f'Authentication error: {str(e)}')
         return JsonResponse({'error': str(e)}, status=500)
 
-@csrf_exempt  # Required for ESP32 hardware POSTs (no CSRF token support)
 # @fingerprint_required
 def submit_vote(request):
     """Submit vote with authentication check (session-based)."""
@@ -488,205 +426,72 @@ def logout_voter(request):
     request.session.pop('authenticated_voter_id', None)
     return redirect('voting:home')
 
-# Add these new views after the existing views
-
-@csrf_exempt  # Required for ESP32 hardware POSTs (no CSRF token support)
-@require_http_methods(["POST"])
-def trigger_scan(request):
-    """Admin triggers fingerprint scan for registration or matching"""
-    try:
-        data = json.loads(request.body)
-        action = data.get('action')  # 'register' or 'match'
-        voter_id = data.get('voter_id')  # Only for registration
-        
-        if action not in ['register', 'match']:
-            return JsonResponse({'error': 'Invalid action. Use "register" or "match".'}, status=400)
-        
-        if action == 'register' and not voter_id:
-            return JsonResponse({'error': 'voter_id required for registration'}, status=400)
-        
-        # Store the scan trigger in session or cache
-        request.session['scan_trigger'] = {
-            'action': action,
-            'voter_id': voter_id,
-            'timestamp': timezone.now().isoformat()
-        }
-        request.session.modified = True
-        
-        print(f"🔍 Scan triggered: {action} for voter_id={voter_id}")
-        
-        return JsonResponse({
-            'status': 'success',
-            'message': f'Scan triggered for {action}',
-            'action': action,
-            'voter_id': voter_id
-        })
-        
-    except json.JSONDecodeError:
-        return JsonResponse({'error': 'Invalid JSON'}, status=400)
-    except Exception as e:
-        return JsonResponse({'error': str(e)}, status=500)
-
-@csrf_exempt  # Required for ESP32 hardware GETs (no CSRF token support)
-@require_http_methods(["GET"])
-def get_scan_trigger(request):
-    """ESP32 polls this endpoint to check for scan triggers"""
-    try:
-        scan_trigger = request.session.get('scan_trigger')
-        
-        if not scan_trigger:
-            return JsonResponse({
-                'status': 'no_trigger',
-                'message': 'No scan trigger active'
-            })
-        
-        # Check if trigger is still valid (within 5 minutes)
-        trigger_time = timezone.datetime.fromisoformat(scan_trigger['timestamp'])
-        if timezone.now() - trigger_time > timezone.timedelta(minutes=5):
-            # Clear expired trigger
-            request.session.pop('scan_trigger', None)
-            return JsonResponse({
-                'status': 'expired',
-                'message': 'Scan trigger expired'
-            })
-        
-        return JsonResponse({
-            'status': 'trigger_active',
-            'action': scan_trigger['action'],
-            'voter_id': scan_trigger['voter_id'],
-            'message': f"Scan required for {scan_trigger['action']}"
-        })
-        
-    except Exception as e:
-        return JsonResponse({'error': str(e)}, status=500)
-
-@csrf_exempt  # Required for ESP32 hardware POSTs (no CSRF token support)
 def upload_template(request):
-    """Updated upload_template to handle both registration and matching flows"""
     if request.method == 'POST':
         try:
             data = json.loads(request.body)
-            voter_id = data.get('voter_id')  # For registration flow
-            template_b64 = data.get('template')  # Changed from template_hex to template
-            
-            print(f"📥 Received template for voter_id: {voter_id}")
-            print(f"📦 Template size: {len(template_b64) if template_b64 else 0} chars")
+            user_id = data.get('user_id')
+            template_b64 = data.get('template_hex')
 
-            if not template_b64:
-                return JsonResponse({'error': 'template is required'}, status=400)
+            print("\U0001F4E5 Received template for user_id:", user_id)
+            print("\U0001F9EC Template (first 100 chars):", template_b64[:100])
 
             # Decode base64 string to bytes
             template_bytes = base64.b64decode(template_b64)
+
+            # Convert bytes back to hex string if you want to store as hex text
             template_hex = template_bytes.hex()
 
-            if voter_id:
-                # Registration flow - store template in session for form population
-                try:
-                    # Store the template in session for the registration form
-                    request.session['pending_template'] = template_hex
-                    request.session['pending_voter_id'] = voter_id
-                    request.session.modified = True
-                    
-                    print(f"✅ Template stored in session for voter_id: {voter_id}")
-                    
-                    # Clear the scan trigger
-                    request.session.pop('scan_trigger', None)
-                    
-                    return JsonResponse({
-                        'status': 'success',
-                        'message': f'Template captured successfully for registration',
-                        'voter_id': voter_id,
-                        'template_hex': template_hex
-                    })
-                except Exception as e:
-                    return JsonResponse({'error': f'Error storing template: {str(e)}'}, status=500)
-            else:
-                # Matching flow - create temporary storage
-                temp_voter = Voter.objects.create(
-                    voter_id=f"TEMP_{int(timezone.now().timestamp())}",
-                    name=f"Temporary User {int(timezone.now().timestamp())}",
-                    fingerprint_id=str(int(timezone.now().timestamp()))
-                )
-                FingerprintTemplate.objects.create(
-                    voter=temp_voter,
-                    template_hex=template_hex
-                )
-                print(f"✅ Template saved for temporary voter: {temp_voter.name}")
+            FingerprintTemplate.objects.create(
+                user_id=user_id,
+                template_hex=template_hex
+            )
 
-                return JsonResponse({'status': 'success'})
-                
+            return JsonResponse({'status': 'success'})
         except Exception as e:
-            print(f"❌ Error: {str(e)}")
+            print("\u274C Error:", str(e))
             return JsonResponse({'status': 'error', 'message': str(e)}, status=400)
     
     return JsonResponse({'status': 'error', 'message': 'Only POST allowed'}, status=405)
 
-
-
-
-
-@csrf_exempt  # Required for ESP32 hardware GETs (no CSRF token support)
-@require_http_methods(["GET"])
-def check_pending_template(request):
-    """Check if there's a pending template in session for registration"""
+@csrf_protect
+@require_http_methods(["POST"])
+def register_voter_with_fingerprint(request):
+    """Register a new voter and their fingerprint template."""
     try:
-        pending_template = request.session.get('pending_template')
-        pending_voter_id = request.session.get('pending_voter_id')
-        
-        if pending_template:
-            return JsonResponse({
-                'status': 'success',
-                'has_template': True,
-                'template_hex': pending_template,
-                'voter_id': pending_voter_id
-            })
-        else:
-            return JsonResponse({
-                'status': 'success',
-                'has_template': False
-            })
-            
+        data = json.loads(request.body)
+        name = data.get('name')
+        email = data.get('email')
+        template_hex = data.get('template_hex')
+        if not (name and email and template_hex):
+            return JsonResponse({'error': 'Missing required fields (name, email, template_hex).'}, status=400)
+        if Voter.objects.filter(email=email).exists():
+            return JsonResponse({'error': 'A voter with this email already exists.'}, status=400)
+        voter = Voter.objects.create(name=name, email=email)
+        FingerprintTemplate.objects.create(voter=voter, template_hex=template_hex)
+        return JsonResponse({'status': 'success', 'voter_id': voter.id})
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
 
-@csrf_exempt  # Required for ESP32 hardware POSTs (no CSRF token support)
+@csrf_protect
 @require_http_methods(["POST"])
-def scanner_authenticate(request):
-    """Authenticate voter for scanner page using fingerprint template from ESP32"""
+def fingerprint_authenticate(request):
+    """Authenticate a voter by fingerprint template (exact match)."""
     try:
         data = json.loads(request.body)
         template_hex = data.get('template_hex')
-        
         if not template_hex:
-            return JsonResponse({'error': 'template_hex is required'}, status=400)
-        
-        # Use similarity-based matching
-        match_result = fingerprint_matcher.find_best_match(template_hex)
-        
-        if match_result:
-            voter, confidence = match_result
-            print(f"✅ Scanner authentication successful: {voter.name} (confidence: {confidence:.2f})")
-            
+            return JsonResponse({'error': 'Missing template_hex.'}, status=400)
+        try:
+            fp = FingerprintTemplate.objects.select_related('voter').get(template_hex=template_hex)
+            voter = fp.voter
             if voter.has_voted:
-                return JsonResponse({
-                    'status': 'already_voted', 
-                    'name': voter.name,
-                    'confidence': round(confidence, 3)
-                })
-            
+                return JsonResponse({'status': 'already_voted', 'voter_name': voter.name})
             # Set session for authenticated voter
             request.session['authenticated_voter_id'] = voter.id
             request.session.modified = True
-            
-            return JsonResponse({
-                'status': 'ok', 
-                'name': voter.name,
-                'confidence': round(confidence, 3)
-            })
-        else:
-            print("❌ Scanner authentication failed: no match found")
-            return JsonResponse({'status': 'not_found'}, status=404)
-            
+            return JsonResponse({'status': 'authenticated', 'voter_id': voter.id, 'voter_name': voter.name})
+        except FingerprintTemplate.DoesNotExist:
+            return JsonResponse({'error': 'Fingerprint not recognized.'}, status=404)
     except Exception as e:
-        print(f"❌ Error in scanner_authenticate: {e}")
         return JsonResponse({'error': str(e)}, status=500)
