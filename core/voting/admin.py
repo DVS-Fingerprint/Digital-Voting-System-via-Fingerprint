@@ -19,8 +19,8 @@ class VoterAdmin(admin.ModelAdmin):
             'all': ('admin/css/fingerprint_admin.css',)
         }
     
-    def get_form(self, request, obj=None, **kwargs):
-        form = super().get_form(request, obj, **kwargs)
+    def get_form(self, request, obj=None, change=False, **kwargs):  # fix signature to add change=False
+        form = super().get_form(request, obj, change=change, **kwargs)
         if obj is None:  # Only for new voter creation
             if hasattr(form, 'base_fields') and 'fingerprint_id' in form.base_fields:
                 form.base_fields['fingerprint_id'].widget.attrs.update({
@@ -29,6 +29,7 @@ class VoterAdmin(admin.ModelAdmin):
                     'placeholder': 'Scan fingerprint to auto-fill this field...'
                 })
         return form
+
 
 @admin.register(Post)
 class PostAdmin(admin.ModelAdmin):
@@ -65,4 +66,3 @@ class VotingSessionAdmin(admin.ModelAdmin):
 class ActivityLogAdmin(admin.ModelAdmin):
     list_display = ('action', 'timestamp')
     search_fields = ('action',)
-

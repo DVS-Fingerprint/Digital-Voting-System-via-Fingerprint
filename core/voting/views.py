@@ -1,28 +1,24 @@
-from django.shortcuts import render, get_object_or_404, redirect
-from django.utils import timezone
-from django.http import HttpResponse, HttpResponseRedirect, JsonResponse
+from django.shortcuts import render, redirect, get_object_or_404
+from django.http import JsonResponse
+from django.utils.timezone import now
+from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_http_methods, require_GET
 from django.contrib.admin.views.decorators import staff_member_required
 from django.db.models import Count
-from django.views.decorators.csrf import csrf_exempt
-from django.views.decorators.http import require_http_methods
-from rest_framework import status, permissions, generics, views
-from rest_framework.response import Response
+
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAdminUser
-import json
-import base64
-from django.utils.timezone import now
-from .matcher import match_templates
-from .forms import VoterRegistrationForm
-from .serializers import (
-    VoterSerializer, PostSerializer, CandidateSerializer, VoteSerializer,
-    VotingSessionSerializer
-)
-from .models import ScanTrigger
-from django.views.decorators.http import require_GET
-# Import models once here, consistently relative import
-from .models import Candidate, Voter, Vote, Post, VotingSession, FingerprintTemplate
+from rest_framework.response import Response
 
+import base64, json
+
+from .models import (
+    Voter, Candidate, Vote, Post, VotingSession, FingerprintTemplate, ActivityLog, ScanTrigger
+)
+from .forms import VoterRegistrationForm
+from .serializers import VoterSerializer, PostSerializer, CandidateSerializer, VoteSerializer, VotingSessionSerializer
+from .matcher import match_templates
+from django.utils import timezone
 
 @staff_member_required
 def register_voter(request):
@@ -32,7 +28,7 @@ def register_voter(request):
         if form.is_valid():
             form.save()
             success = True
-            form = VoterRegistrationForm()  # Reset form after success
+            form = VoterRegistrationForm()
     else:
         form = VoterRegistrationForm()
     return render(request, 'voting/register_voter.html', {'form': form, 'success': success})
@@ -86,7 +82,7 @@ def candidates_list(request):
 @api_view(['POST'])
 def vote_view(request):
     fingerprint_id = request.data.get('fingerprint_id')
-    votes = request.data.get('votes')  # [{post: id, candidate: id}]
+    votes = request.data.get('votes')
     try:
         voter = Voter.objects.get(fingerprint_id=fingerprint_id)
         if voter.has_voted:
@@ -95,10 +91,8 @@ def vote_view(request):
         if not session:
             return Response({'detail': 'Voting is not active.'}, status=403)
         for vote_item in votes:
-            post_id = vote_item['post']
-            candidate_id = vote_item['candidate']
-            post = Post.objects.get(id=post_id)
-            candidate = Candidate.objects.get(id=candidate_id, post=post)
+            post = Post.objects.get(id=vote_item['post'])
+            candidate = Candidate.objects.get(id=vote_item['candidate'], post=post)
             Vote.objects.create(voter=voter, candidate=candidate, post=post)
         voter.has_voted = True
         voter.last_vote_attempt = timezone.now()
@@ -126,7 +120,6 @@ def results_view(request):
             })
         results.append({'post': PostSerializer(post).data, 'candidates': candidate_results})
     return Response(results)
-
 
 @api_view(['POST'])
 @permission_classes([IsAdminUser])
@@ -361,28 +354,72 @@ def logout_voter(request):
     return redirect('voting:home')
 
 
+
 @csrf_exempt
+@require_http_methods(["POST"])
+def trigger_scan(request):
+    try:
+        data = json.loads(request.body)
+        voter_id = data.get("voter_id")
+        action = data.get("action")
+
+        if action not in ["register", "match"]:
+            return JsonResponse({"error": "Invalid action"}, status=400)
+
+        if action == "register" and not voter_id:
+            return JsonResponse({"error": "voter_id required for registration"}, status=400)
+
+        ScanTrigger.objects.all().delete()
+        ScanTrigger.objects.create(voter_id=voter_id if voter_id else None, action=action)
+        ActivityLog.objects.create(action=f"Scan trigger created for voter ID {voter_id} ({action})")
+
+        return JsonResponse({"message": "Scan trigger created"})
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=500)
+
+
+@require_GET
+def get_scan_trigger(request):
+    latest_trigger = ScanTrigger.objects.order_by("-created_at").first()
+    if latest_trigger:
+        response = {
+            "voter_id": latest_trigger.voter_id,
+            "action": latest_trigger.action
+        }
+        latest_trigger.delete()
+        return JsonResponse(response)
+    return JsonResponse({"action": None, "voter_id": None})
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
 def upload_template(request):
-    if request.method == 'POST':
+    try:
+        data = json.loads(request.body)
+        voter_id = data.get('voter_id')
+        template_b64 = data.get('template_hex')
+
+        if not voter_id or not template_b64:
+            return JsonResponse({'status': 'error', 'message': 'Missing voter_id or template_hex'}, status=400)
+
         try:
-            data = json.loads(request.body)
-            user_id = data.get('user_id')
-            template_b64 = data.get('template_hex')
-            print("\U0001F4E5 Received template for user_id:", user_id)
-            print("\U0001F9EC Template (first 100 chars):", template_b64[:100])
             template_bytes = base64.b64decode(template_b64)
-            template_hex = template_bytes.hex()
-            FingerprintTemplate.objects.create(
-                user_id=user_id,
-                template_hex=template_hex
-            )
-            return JsonResponse({'status': 'success'})
-        except Exception as e:
-            print("\u274C Error:", str(e))
-            return JsonResponse({'status': 'error', 'message': str(e)}, status=400)
-    return JsonResponse({'status': 'error', 'message': 'Only POST allowed'}, status=405)
+        except Exception:
+            return JsonResponse({'status': 'error', 'message': 'Invalid base64 template'}, status=400)
+
+        template_hex = template_bytes.hex()
+        voter = Voter.objects.get(id=voter_id)
+
+        FingerprintTemplate.objects.create(voter=voter, template_hex=template_hex)
+        return JsonResponse({'status': 'success'})
+    except Voter.DoesNotExist:
+        return JsonResponse({'status': 'error', 'message': 'Voter not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
 
 
+@csrf_exempt
+@require_http_methods(["POST"])
 def match_template(request):
     try:
         data = json.loads(request.body)
@@ -392,23 +429,19 @@ def match_template(request):
             return JsonResponse({'status': 'error', 'message': 'No template provided'}, status=400)
 
         incoming_template = base64.b64decode(template_b64)
-
         all_templates = FingerprintTemplate.objects.select_related('voter').all()
 
         for record in all_templates:
             db_template_bytes = bytes.fromhex(record.template_hex)
             match_score = match_templates(incoming_template, db_template_bytes)
 
-            if match_score > 50:
+            if match_score > 20:
                 voter = record.voter
-                if voter is None:
-                    continue  # skip if no voter linked (defensive)
+                if not voter:
+                    continue
 
                 if voter.has_voted:
-                    return JsonResponse({
-                        'status': 'already_voted',
-                        'voter_name': voter.name
-                    })
+                    return JsonResponse({'status': 'already_voted', 'voter_name': voter.name})
 
                 voter.has_voted = True
                 voter.last_vote_attempt = now()
@@ -421,25 +454,5 @@ def match_template(request):
                 })
 
         return JsonResponse({'status': 'not_found'})
-
     except Exception as e:
         return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
-
-def trigger_scan(request):
-    if request.method == 'POST':
-        data = json.loads(request.body)
-        voter_id = data.get('voter_id')
-        if voter_id is None:
-            return JsonResponse({'error': 'voter_id required'}, status=400)
-        ScanTrigger.objects.create(voter_id=voter_id)
-        return JsonResponse({'message': f'Scan triggered for voter {voter_id}'})
-    return JsonResponse({'error': 'POST method only'}, status=405)
-
-def get_scan_trigger(request):
-    trigger = ScanTrigger.objects.first()
-    if trigger:
-        voter_id = trigger.voter_id
-        trigger.delete()  # remove it so it's used only once
-        return JsonResponse({'user_id': voter_id})
-    else:
-        return JsonResponse({'user_id': -1})
