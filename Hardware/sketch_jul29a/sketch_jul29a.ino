@@ -160,40 +160,53 @@ void waitForFingerToBeRemoved() {
   delay(500);
 }
 
-// Poll backend for scan trigger (returns voter_id as string, action string, and trigger id)
 bool pollForScanTrigger(String &voter_id_out, String &action_out, int &trigger_id_out) {
   voter_id_out = "";
   action_out = "";
   trigger_id_out = -1;
 
   if (WiFi.status() != WL_CONNECTED) {
-    Serial.println("WiFi not connected");
+    Serial.println("❌ WiFi not connected");
+    Serial.print("WiFi status code: ");
+    Serial.println(WiFi.status());
+    Serial.print("Local IP: ");
+    Serial.println(WiFi.localIP());
     return false;
   }
 
   HTTPClient http;
   http.begin(TRIGGER_URL);
+
+  Serial.print("📡 Sending HTTP GET to: ");
+  Serial.println(TRIGGER_URL);
+
   int httpCode = http.GET();
+  Serial.print("HTTP Response code: ");
+  Serial.println(httpCode);
+
   if (httpCode != 200) {
-    Serial.printf("Failed to get scan trigger, code: %d\n", httpCode);
+    Serial.printf("❌ Failed to get scan trigger, code: %d\n", httpCode);
+    // Optionally print error detail from HTTPClient
+    Serial.print("Error detail: ");
+    Serial.println(http.errorToString(httpCode).c_str());
     http.end();
     return false;
   }
 
   String payload = http.getString();
-  Serial.println("📦 Received scan trigger JSON:");
+  Serial.println("Payload received:");
   Serial.println(payload);
+
   http.end();
 
   StaticJsonDocument<256> doc;
   DeserializationError error = deserializeJson(doc, payload);
   if (error) {
-    Serial.print(F("deserializeJson() failed: "));
+    Serial.print("❌ JSON deserialization failed: ");
     Serial.println(error.f_str());
     return false;
   }
 
-  // Extract fields
   if (doc.containsKey("id")) trigger_id_out = doc["id"];
   if (doc.containsKey("voter_id")) voter_id_out = doc["voter_id"].as<String>();
   if (doc.containsKey("action")) action_out = doc["action"].as<String>();
@@ -205,6 +218,8 @@ bool pollForScanTrigger(String &voter_id_out, String &action_out, int &trigger_i
 
   return true;
 }
+
+
 // Send template to backend
 // Add triggerId param to this function
 bool sendTemplateToBackend(const String& base64Data, const String& voter_id, const String& action, int trigger_id) {

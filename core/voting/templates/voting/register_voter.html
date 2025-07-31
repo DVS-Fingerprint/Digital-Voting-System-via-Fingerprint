@@ -241,36 +241,16 @@
             </div>
           </div>
 
-          <!-- Fingerprint Section -->
+          <!-- Actions Section -->
           <div class="card border-primary mb-4 fingerprint-card">
             <div class="card-header bg-light">
               <h6 class="mb-0">
-                <i class="fas fa-fingerprint me-2"></i>Fingerprint Registration
+                <i class="fas fa-cogs me-2"></i>Actions
               </h6>
             </div>
             <div class="card-body">
               <div class="row">
-                <div class="col-md-8">
-                  <div class="mb-3">
-                    <label for="{{ form.template_hex.id_for_label }}" class="form-label fw-bold">
-                      <i class="fas fa-fingerprint me-2"></i>Fingerprint Template
-                    </label>
-                    <div class="custom-select-wrapper">
-                      {{ form.template_hex }}
-                    </div>
-                    <div class="form-text">
-                      <i class="fas fa-info-circle me-1"></i>Select a fingerprint template from the dropdown below (latest 20 shown)
-                    </div>
-                    {% if form.template_hex.errors %}
-                      <div class="invalid-feedback d-block">
-                        {% for error in form.template_hex.errors %}
-                          <i class="fas fa-exclamation-circle me-1"></i>{{ error }}
-                        {% endfor %}
-                      </div>
-                    {% endif %}
-                  </div>
-                </div>
-                <div class="col-md-4">
+                <div class="col-md-12">
                   <div class="mb-3">
                     <label class="form-label fw-bold">
                       <i class="fas fa-cogs me-2"></i>Actions
@@ -290,7 +270,7 @@
           </div>
           
           <div class="d-grid gap-2">
-            <button type="submit" class="btn btn-success btn-lg" id="registerBtn" {% if not has_pending_template %}disabled{% endif %}>
+            <button type="submit" class="btn btn-success btn-lg" id="registerBtn">
               <i class="fas fa-save me-2"></i>Register Voter
             </button>
           </div>
@@ -303,7 +283,7 @@
   <a href="{% url 'voting:new_voter' %}" class="btn btn-warning">
     <i class="fas fa-user-plus me-2"></i>New Voter
   </a>
-  <button type="submit" class="btn btn-success btn-lg" id="registerBtn" {% if not has_pending_template %}disabled{% endif %}>
+  <button type="submit" class="btn btn-success btn-lg" id="registerBtn">
     <i class="fas fa-save me-2"></i>Register Voter
   </button>
 </div>

@@ -74,40 +74,16 @@ def register_voter(request):
         form = VoterRegistrationForm(request.POST, instance=voter)
         if form.is_valid():
             voter = form.save()
-            selected_template_id = form.cleaned_data.get('template_hex')
-            if selected_template_id:
-                try:
-                    selected_template = FingerprintTemplate.objects.get(id=selected_template_id)
-                    # Remove old templates for this voter
-                    FingerprintTemplate.objects.filter(voter=voter).delete()
-
-                    # Link or create template
-                    if selected_template.voter is None:
-                        selected_template.voter = voter
-                        selected_template.save()
-                    else:
-                        FingerprintTemplate.objects.create(voter=voter, template_hex=selected_template.template_hex)
-
-                    # Clear pending template from session
-                    request.session.pop('pending_template', None)
-                    request.session.pop('pending_voter_id', None)
-                except FingerprintTemplate.DoesNotExist:
-                    pass
             success = True
     else:
-        # On GET, pre-fill form with current voter data and template if exists
-        initial_data = {}
-        pending_template = request.session.get('pending_template')
-        if pending_template:
-            initial_data['template_hex'] = pending_template
-
-        form = VoterRegistrationForm(instance=voter, initial=initial_data)
+        # On GET, pre-fill form with current voter data
+        form = VoterRegistrationForm(instance=voter)
 
     context = {
         'form': form,
         'success': success,
         'next_voter_id': current_voter_id,
-        'has_pending_template': bool(request.session.get('pending_template'))
+        'has_pending_template': True  # Always allow registration since we removed template requirement
     }
 
     return render(request, 'voting/register_voter.html', context)
