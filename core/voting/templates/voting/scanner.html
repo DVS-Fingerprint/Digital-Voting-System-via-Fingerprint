@@ -1,26 +1,25 @@
 {% extends 'voting/base.html' %}
-{% load i18n %}
-{% block title %}{% trans "Fingerprint Verification" %}{% endblock %}
+{% load static %}
+
+{% block title %}Fingerprint Scanner{% endblock %}
 
 {% block content %}
 <div class="content-card verification-card">
-    <h4>{% trans "Fingerprint Verification" %}</h4>
+    <h4>Fingerprint Verification</h4>
+
+    <button id="scan-btn" class="btn btn-primary mt-3">Scan Fingerprint</button>
     
-    <div id="scan-status" class="my-5">
-        <i id="fingerprint-icon" class="fas fa-fingerprint fingerprint-icon"></i>
-        <div id="spinner" style="display:none; font-size:2.5rem; color:#0dcaf0;">
-            <i class="fas fa-spinner fa-spin"></i>
-        </div>
-        <p class="lead text-muted" id="scan-instruction">{% trans "Place your finger on the scanner" %}</p>
-        <div class="progress" style="height: 6px;">
-            <div id="scan-progress-bar" class="progress-bar bg-info" role="progressbar" style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
-        </div>
-        <p id="scan-message" class="mt-3"></p>
+    <div id="scan-status" class="mt-3 text-info"></div>
+
+    <div id="proceed-container" class="mt-4" style="display:none;">
+        <button id="proceed-btn" class="btn btn-success">
+            Proceed to Voting
+        </button>
     </div>
-    
+
     <div class="mt-4">
         <a href="{% url 'voting:home' %}" class="btn btn-secondary-biomatdaan">
-            <i class="fas fa-arrow-left me-2"></i>{% trans "Cancel" %}
+            <i class="fas fa-arrow-left me-2"></i>Cancel
         </a>
     </div>
 </div>
@@ -30,6 +29,7 @@
 {% endblock %}
 
 {% block extra_js %}
+<<<<<<< HEAD
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     const progressBar = document.getElementById('scan-progress-bar');
@@ -166,3 +166,7 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 {% endblock %} 
+=======
+<script src="{% static 'js/scanner.js' %}"></script>
+{% endblock %}
+>>>>>>> origin/feature/smriti

@@ -28,81 +28,89 @@ from .models import Voter, Candidate, Vote, Post, VotingSession
 from django.utils import timezone
 
 
+from django.shortcuts import render, redirect, get_object_or_404
+from django.contrib.admin.views.decorators import staff_member_required
+from .models import Voter, FingerprintTemplate
+from .forms import VoterRegistrationForm
+
 @staff_member_required
 def register_voter(request):
     success = False
-    
-    # Get the next available voter ID for display
-    last_voter = Voter.objects.order_by('-voter_id').first()
-    if last_voter:
-        try:
-            last_num = int(last_voter.voter_id.replace('V', ''))
-            next_voter_id = f"V{last_num + 1:06d}"
-        except ValueError:
-            next_voter_id = "V000001"
-    else:
-        next_voter_id = "V000001"
-    
-    if request.method == 'POST':
-        form = VoterRegistrationForm(request.POST)
-        if form.is_valid():
-            # Auto-generate voter ID if not provided
-            if not form.cleaned_data.get('voter_id'):
-                form.instance.voter_id = next_voter_id
-            
-            voter = form.save()
-            selected_template = form.cleaned_data.get('template_hex')
-            if selected_template:
-                # Check if fingerprint template already exists for this voter
-                FingerprintTemplate.objects.filter(voter=voter).delete()  # Remove old template
-                
-                # If the selected template is temporary (no voter), link it to this voter
-                if selected_template.voter is None:
-                    selected_template.voter = voter
-                    selected_template.save()
-                else:
-                    # Create a new template for this voter
-                    FingerprintTemplate.objects.create(voter=voter, template_hex=selected_template.template_hex)
-                
-                print(f"✅ Voter registered with fingerprint: {voter.name} (ID: {voter.voter_id})")
-                # Clear pending template from session
-                request.session.pop('pending_template', None)
-                request.session.pop('pending_voter_id', None)
-            else:
-                print(f"⚠️ Voter registered without fingerprint: {voter.name} (ID: {voter.voter_id})")
-            
-            success = True
-            form = VoterRegistrationForm()  # Reset form after success
-            # Re-calculate next voter ID after successful registration
-            last_voter = Voter.objects.order_by('-voter_id').first()
-            if last_voter:
-                try:
-                    last_num = int(last_voter.voter_id.replace('V', ''))
-                    next_voter_id = f"V{last_num + 1:06d}"
-                except ValueError:
-                    next_voter_id = "V000001"
-            else:
-                next_voter_id = "V000001"
-    else:
-        # Check for pending template in session
-        pending_template = request.session.get('pending_template')
-        pending_voter_id = request.session.get('pending_voter_id')
+
+    # Check if there's a current voter_id in session
+    current_voter_id = request.session.get('current_voter_id')
+
+    # If no current voter ID, generate the next one and create placeholder
+    if not current_voter_id:
+        last_voter = Voter.objects.order_by('-voter_id').first()
+        if last_voter:
+            try:
+                last_num = int(last_voter.voter_id.replace('V', ''))
+                current_voter_id = f"V{last_num + 1:06d}"
+            except ValueError:
+                current_voter_id = "V000001"
+        else:
+            current_voter_id = "V000001"
         
-        initial_data = {'voter_id': next_voter_id}
+        # Create placeholder voter if it doesn't exist
+        if not Voter.objects.filter(voter_id=current_voter_id).exists():
+            Voter.objects.create(
+                voter_id=current_voter_id,
+                name="Placeholder Voter",
+                fingerprint_id=None,
+                has_voted=False
+            )
+        # Save in session
+        request.session['current_voter_id'] = current_voter_id
+
+    # Try to get voter instance; if not found, clear session and retry
+    try:
+        voter = Voter.objects.get(voter_id=current_voter_id)
+    except Voter.DoesNotExist:
+        request.session.pop('current_voter_id', None)
+        return redirect('/register-voter/')
+
+    if request.method == 'POST':
+        form = VoterRegistrationForm(request.POST, instance=voter)
+        if form.is_valid():
+            voter = form.save()
+            selected_template_id = form.cleaned_data.get('template_hex')
+            if selected_template_id:
+                try:
+                    selected_template = FingerprintTemplate.objects.get(id=selected_template_id)
+                    # Remove old templates for this voter
+                    FingerprintTemplate.objects.filter(voter=voter).delete()
+
+                    # Link or create template
+                    if selected_template.voter is None:
+                        selected_template.voter = voter
+                        selected_template.save()
+                    else:
+                        FingerprintTemplate.objects.create(voter=voter, template_hex=selected_template.template_hex)
+
+                    # Clear pending template from session
+                    request.session.pop('pending_template', None)
+                    request.session.pop('pending_voter_id', None)
+                except FingerprintTemplate.DoesNotExist:
+                    pass
+            success = True
+    else:
+        # On GET, pre-fill form with current voter data and template if exists
+        initial_data = {}
+        pending_template = request.session.get('pending_template')
         if pending_template:
             initial_data['template_hex'] = pending_template
-        
-        # Pre-fill the voter_id field with the next available ID
-        form = VoterRegistrationForm(initial=initial_data)
-    
+
+        form = VoterRegistrationForm(instance=voter, initial=initial_data)
+
     context = {
-        'form': form, 
+        'form': form,
         'success': success,
-        'next_voter_id': next_voter_id,
+        'next_voter_id': current_voter_id,
         'has_pending_template': bool(request.session.get('pending_template'))
     }
-    return render(request, 'voting/register_voter.html', context)
 
+    return render(request, 'voting/register_voter.html', context)
 
 @staff_member_required
 def admin_dashboard(request):
@@ -122,6 +130,7 @@ def admin_dashboard(request):
 def home(request):
     return render(request, 'voting/home.html')
 
+<<<<<<< HEAD
 
 def voter_home(request):
     """Render the voter home page for authenticated voters"""
@@ -139,6 +148,8 @@ def voter_home(request):
     return render(request, 'voting/voter_home.html', {'voter': voter})
 
 
+=======
+>>>>>>> origin/feature/smriti
 def candidate_list(request):
     posts = Post.objects.prefetch_related('candidates').all()
     return render(request, 'voting/candidate_list.html', {'posts': posts})
@@ -512,6 +523,7 @@ def logout_voter(request):
     return redirect('voting:home')
 
 
+
 @csrf_exempt
 @require_http_methods(["POST"])
 def trigger_scan(request):
@@ -531,24 +543,28 @@ def trigger_scan(request):
             print(f"❌ Invalid action: {action}")
             return JsonResponse({"error": "Invalid action"}, status=400)
 
-        if action == "register" and not voter_id:
-            print(f"❌ Missing voter_id for register action")
-            return JsonResponse({"error": "voter_id required for registration"}, status=400)
+        if action == "register":
+            if not voter_id:
+                print(f"❌ Missing voter_id for register action")
+                return JsonResponse({"error": "voter_id required for registration"}, status=400)
+            # New check: voter must exist before allowing registration trigger
+            if not Voter.objects.filter(voter_id=voter_id).exists():
+                print(f"❌ Voter ID {voter_id} does not exist, cannot create register trigger")
+                return JsonResponse({"error": "Voter does not exist for this voter_id"}, status=400)
 
-        # Create a scan trigger for ESP32 to poll
-        # Clear any existing triggers first
-        print(f"🔍 Clearing existing triggers...")
-        ScanTrigger.objects.all().delete()
+        # Mark any previous unused triggers as used to prevent duplicates
+        print(f"🔄 Marking previous unused triggers as used...")
+        ScanTrigger.objects.filter(used=False).update(used=True)
         
-        # Create new trigger
-        print(f"🔍 Creating new trigger with voter_id={voter_id}, action={action}")
+        # Create new scan trigger
+        print(f"✅ Creating new trigger with voter_id={voter_id}, action={action}")
         trigger = ScanTrigger.objects.create(
             voter_id=voter_id if voter_id else None,
             action=action,
-            is_used=False
+            used=False
         )
 
-        # Log the scan trigger action
+        # Log the scan trigger action (optional)
         ActivityLog.objects.create(action=f"Scan trigger created for voter ID {voter_id} ({action})")
 
         print(f"✅ Trigger created successfully with ID: {trigger.id}")
@@ -557,96 +573,125 @@ def trigger_scan(request):
             "message": "Scan trigger created",
             "trigger_id": trigger.id
         })
+
     except Exception as e:
         print(f"❌ Error in trigger_scan: {str(e)}")
         import traceback
         traceback.print_exc()
         return JsonResponse({"error": str(e)}, status=500)
-
-
+ 
 @require_GET
 def get_scan_trigger(request):
     """ESP32 polls this endpoint to check for scan triggers"""
     try:
         print(f"🔍 ESP32 polling for scan trigger...")
-        
+
         # Get the latest unused trigger
-        trigger = ScanTrigger.objects.filter(is_used=False).order_by('-created_at').first()
-        
+        trigger = ScanTrigger.objects.filter(used=False).order_by('-created_at').first()
+
         if trigger:
             print(f"✅ Found trigger: voter_id={trigger.voter_id}, action={trigger.action}, id={trigger.id}")
-            # Mark as used
-            trigger.is_used = True
-            trigger.save()
-            print(f"✅ Trigger marked as used")
-            
+
+            # ✅ Include 'id' in response so ESP32 can mark it used later
             return JsonResponse({
+                "id": trigger.id,
                 "action": trigger.action,
                 "voter_id": trigger.voter_id
             })
         else:
             print(f"❌ No unused triggers found")
-            # Check if there are any triggers at all
+            # Show recent triggers for debugging
             all_triggers = ScanTrigger.objects.all().order_by('-created_at')[:5]
-            print(f"🔍 Recent triggers: {[f'ID:{t.id}, voter_id:{t.voter_id}, action:{t.action}, used:{t.is_used}' for t in all_triggers]}")
-            
-            return JsonResponse({"action": None, "voter_id": None})
+            print(f"🔍 Recent triggers: {[f'ID:{t.id}, voter_id:{t.voter_id}, action:{t.action}, used:{t.used}' for t in all_triggers]}")
+
+            return JsonResponse({"action": None, "voter_id": None, "id": None})
     except Exception as e:
         print(f"❌ Error in get_scan_trigger: {str(e)}")
         return JsonResponse({"error": str(e)}, status=500)
 
-
+    
+@csrf_exempt
+@require_http_methods(["POST"])
+def mark_trigger_used(request):
+    """Mark a scan trigger as used after ESP32 processes it"""
+    try:
+        data = json.loads(request.body)
+        trigger_id = data.get("id")
+        if not trigger_id:
+            return JsonResponse({"error": "trigger id required"}, status=400)
+        
+        trigger = ScanTrigger.objects.get(id=trigger_id)
+        trigger.used = True
+        trigger.save()
+        
+        print(f"✅ Trigger {trigger_id} marked as used.")
+        return JsonResponse({"status": "success"})
+    except ScanTrigger.DoesNotExist:
+        return JsonResponse({"error": "Trigger not found"}, status=404)
+    
 @csrf_exempt
 @require_http_methods(["GET", "POST"])
 def upload_template(request):
     """Upload fingerprint template for registration"""
     try:
         if request.method == "GET":
-            # For testing purposes, return a simple response
             return JsonResponse({
                 'status': 'info',
-                'message': 'This endpoint accepts POST requests with template_hex and voter_id',
+                'message': 'This endpoint accepts POST requests with template_hex or template (base64) and voter_id',
                 'example': {
                     'template_hex': 'your_template_hex_data',
                     'voter_id': 'optional_voter_id'
                 }
             })
-        
-        # Handle POST request
+
         data = json.loads(request.body)
+        print(f"📥 Received upload_template POST data: {data}")
+
+        template_b64 = data.get('template') or data.get('template_b64')
         template_hex = data.get('template_hex')
-        voter_id = data.get('voter_id')
-        
+        voter_id = data.get('voter_id', '').strip()
+
+        if template_b64 and not template_hex:
+            try:
+                template_hex = base64.b64decode(template_b64).hex()
+            except Exception as e:
+                return JsonResponse({'status': 'error', 'message': 'Invalid base64 data'}, status=400)
+
         if not template_hex:
             return JsonResponse({'status': 'error', 'message': 'No template provided'}, status=400)
-        
+
         if voter_id:
             try:
-                voter = Voter.objects.get(voter_id=voter_id)
-                # Remove any existing template for this voter
+                print(f"🔍 Looking for voter_id: {voter_id}")
+                voter = Voter.objects.get(voter_id__iexact=voter_id)
                 FingerprintTemplate.objects.filter(voter=voter).delete()
-                # Create new template
                 FingerprintTemplate.objects.create(voter=voter, template_hex=template_hex)
+                print(f"✅ Created FingerprintTemplate for voter {voter_id}")
+
+                trigger = ScanTrigger.objects.filter(voter_id=voter_id, used=False).order_by('-created_at').first()
+                if trigger:
+                    trigger.used = True
+                    trigger.save()
+                    print(f"✅ Marked trigger as used for voter_id={voter_id}")
+
                 return JsonResponse({'status': 'success'})
             except Voter.DoesNotExist:
                 return JsonResponse({'status': 'error', 'message': 'Voter not found'}, status=400)
         else:
-            # Store template without voter (for registration workflow)
-            # Create a temporary template that will be linked to voter during registration
             temp_template = FingerprintTemplate.objects.create(
-                voter=None,  # Will be updated during registration
+                voter=None,
                 template_hex=template_hex
             )
+            print(f"🗃️ Created temporary FingerprintTemplate with id {temp_template.id}")
             return JsonResponse({
                 'status': 'success',
                 'template_id': temp_template.id,
                 'message': 'Template stored successfully'
             })
+
     except Exception as e:
         print("❌ Error:", str(e))
         return JsonResponse({'status': 'error', 'message': str(e)}, status=400)
-    
-    return JsonResponse({'status': 'error', 'message': 'Only POST allowed'}, status=405)
 
 
 @csrf_protect
@@ -693,44 +738,84 @@ def fingerprint_authenticate(request):
         return JsonResponse({'error': str(e)}, status=500)
 
 
+def calculate_similarity(template1: bytes, template2: bytes) -> float:
+    """
+    Returns similarity between two fingerprint templates (0 to 100).
+    Simple normalized Hamming distance approximation.
+    """
+    if not template1 or not template2 or len(template1) != len(template2):
+        return 0.0
+
+    match_count = sum(b1 == b2 for b1, b2 in zip(template1, template2))
+    return (match_count / len(template1)) * 100
+
+
+
 @csrf_exempt
-@require_http_methods(["POST"])
 def match_template(request):
-    """Match fingerprint template for authentication"""
+    if request.method != 'POST':
+        return JsonResponse({'status': 'error', 'message': 'Only POST allowed'}, status=405)
+
     try:
         data = json.loads(request.body)
+        trigger_id = data.get('trigger_id')
         template_b64 = data.get('template')
-        
-        if not template_b64:
-            return JsonResponse({'status': 'error', 'message': 'No template provided'}, status=400)
 
+        if not trigger_id or not template_b64:
+            return JsonResponse({'status': 'error', 'message': 'Missing trigger_id or template'}, status=400)
+
+        try:
+            trigger = ScanTrigger.objects.get(id=trigger_id, action='match', used=False)
+        except ScanTrigger.DoesNotExist:
+            return JsonResponse({'status': 'error', 'message': 'Trigger not found or already used'}, status=404)
+
+        # Decode incoming base64 fingerprint template to bytes
         incoming_template = base64.b64decode(template_b64)
-        all_templates = FingerprintTemplate.objects.select_related('voter').all()
 
-        for record in all_templates:
-            db_template_bytes = bytes.fromhex(record.template_hex)
-            # match_score = match_templates(incoming_template, db_template_bytes)
-            match_score = 0  # Placeholder for now
+        best_score = 0
+        matched_voter = None
 
-            if match_score > 20:
-                voter = record.voter
-                if not voter:
-                    continue
+        templates = FingerprintTemplate.objects.select_related('voter').all()
+        for record in templates:
+            try:
+                db_template = bytes.fromhex(record.template_hex)
+            except Exception:
+                continue  # Skip corrupted templates
 
-                if voter.has_voted:
-                    return JsonResponse({'status': 'already_voted', 'voter_name': voter.name})
+            score = calculate_similarity(incoming_template, db_template)
+            if score > best_score:
+                best_score = score
+                matched_voter = record.voter
 
-                voter.has_voted = True
-                voter.last_vote_attempt = now()
-                voter.save()
+        SIMILARITY_THRESHOLD = 20.0  # Adjust threshold for match sensitivity
 
-                return JsonResponse({'status': 'success', 'voter_name': voter.name})
+        if matched_voter and best_score >= SIMILARITY_THRESHOLD:
+            # Optionally, check if voter has voted already here if needed
 
-        return JsonResponse({'status': 'not_found', 'message': 'No matching fingerprint found'})
+            trigger.used = True
+            trigger.matched_voter = matched_voter
+            trigger.match_status = 'success'
+            trigger.match_message = f"Matched voter {matched_voter.name} with score {best_score:.2f}"
+            trigger.save()
+
+            return JsonResponse({
+                'status': 'success',
+                'voter_id': matched_voter.voter_id,
+                'voter_name': matched_voter.name,
+                'score': best_score
+            })
+
+        # No match found
+        trigger.used = True
+        trigger.match_status = 'not_found'
+        trigger.match_message = 'No matching fingerprint found'
+        trigger.save()
+
+        return JsonResponse({'status': 'not_found', 'message': 'No matching fingerprint found', 'score': best_score})
 
     except Exception as e:
         return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
-
+    
 
 @csrf_exempt
 @require_http_methods(["GET"])
@@ -757,6 +842,7 @@ def get_latest_scanned_template(request):
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
 
+<<<<<<< HEAD
 
 @csrf_exempt
 @require_http_methods(["POST"])
@@ -968,3 +1054,74 @@ def vote_success(request):
             pass
     
     return render(request, 'voting/vote_success.html', {'voter': voter})
+=======
+@csrf_exempt
+@staff_member_required
+def get_pending_templates(request):
+    """
+    Return JSON list of pending fingerprint templates for dropdown,
+    AND update session with the latest template ids.
+    This API is called by JS to keep dropdown in sync.
+    """
+    # You must adjust this query to fetch the real pending templates:
+    # Example: only templates without a linked voter (unassigned)
+    templates = FingerprintTemplate.objects.filter(voter__isnull=True).order_by('-id')[:20]
+    
+    # Store the IDs in session as 'pending_template' (for your form to check)
+    if templates.exists():
+        # For simplicity, store list of IDs as session value
+        request.session['pending_template'] = [str(t.id) for t in templates]
+    else:
+        request.session.pop('pending_template', None)
+    
+    data = [{
+        'id': t.id,
+        'template_hex': t.template_hex[:10] + '...'  # short preview for dropdown label
+    } for t in templates]
+    
+    return JsonResponse(data, safe=False)
+
+@staff_member_required
+def new_voter(request):
+    # Clear current voter session key to start fresh
+    if 'current_voter_id' in request.session:
+        del request.session['current_voter_id']
+    # Also clear any pending fingerprint template session data
+    request.session.pop('pending_template', None)
+    request.session.pop('pending_voter_id', None)
+
+    # Redirect back to register voter page
+    return redirect('voting:register_voter')
+
+def voter_home(request, voter_id):
+    voter = get_object_or_404(Voter, voter_id=voter_id)
+    return render(request, 'voting/voter_home.html', {'voter': voter})
+
+def scan_result(request):
+    trigger_id = request.GET.get('trigger_id')
+    if not trigger_id:
+        return JsonResponse({"status": "error", "message": "Missing trigger_id"}, status=400)
+    try:
+        trigger = ScanTrigger.objects.get(id=trigger_id)
+    except ScanTrigger.DoesNotExist:
+        return JsonResponse({"status": "error", "message": "Trigger not found"}, status=404)
+
+    if not trigger.used:
+        # Not used yet, still pending
+        return JsonResponse({"status": "pending"})
+
+    # Find matched voter
+    if trigger.matched_voter:
+        voter = trigger.matched_voter
+        return JsonResponse({
+            "status": "success",
+            "voter_id": voter.voter_id,
+            "voter_name": voter.name,
+            "score": trigger.score or 0
+        })
+    else:
+        return JsonResponse({
+            "status": "error",
+            "message": "Fingerprint not matched"
+        })
+>>>>>>> origin/feature/smriti

@@ -103,19 +103,49 @@ class FingerprintTemplate(models.Model):
         ordering = ['-created_at']
 
 
+from django.db import models
+
 class ScanTrigger(models.Model):
     voter_id = models.CharField(max_length=50, null=True, blank=True)
-    action = models.CharField(max_length=20, choices=[("register", "Register"), ("match", "Match")])
-    is_used = models.BooleanField(default=False, db_index=True)  # Prevent ESP32 repeating
+    action = models.CharField(
+        max_length=20, 
+        choices=[("register", "Register"), ("match", "Match")]
+    )
+    used = models.BooleanField(default=False, db_index=True)
+    score = models.FloatField(null=True, blank=True)  # Add this for similarity score
     created_at = models.DateTimeField(auto_now_add=True)
 
+    match_status = models.CharField(
+        max_length=20, 
+        choices=[
+            ('pending', 'Pending'),
+            ('success', 'Success'),
+            ('not_found', 'Not Found'),
+            ('already_voted', 'Already Voted'),
+            ('error', 'Error')
+        ],
+        default='pending',
+        db_index=True
+    )
+
+    matched_voter = models.ForeignKey(
+        'Voter', 
+        null=True, 
+        blank=True, 
+        on_delete=models.SET_NULL, 
+        related_name='match_triggers'
+    )
+
+    match_message = models.TextField(null=True, blank=True)
+
     def __str__(self):
-        status = 'used' if self.is_used else 'pending'
-        return f"Trigger for voter_id={self.voter_id} - {self.action} ({status})"
+        status = 'used' if self.used else 'pending'
+        return f"Trigger for voter_id={self.voter_id} - {self.action} ({status}, match: {self.match_status})"
 
     class Meta:
         ordering = ['-created_at']
         indexes = [
-            models.Index(fields=['is_used']),
+            models.Index(fields=['used']),
             models.Index(fields=['created_at']),
+            models.Index(fields=['match_status']),
         ]
