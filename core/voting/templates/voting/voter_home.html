@@ -1,4 +1,5 @@
 {% extends 'voting/base.html' %}
+{% load i18n %}
 
 {% block title %}{% trans "Dashboard" %}{% endblock %}
 
@@ -22,7 +23,11 @@
 
     <div class="row g-4">
         <div class="col-md-6">
-            <a href="{% url 'voting:vote_page' %}" class="dashboard-link-card h-100 d-flex flex-column justify-content-center">
+            {% if request.resolver_match.url_name == 'voter_home_with_id' %}
+                <a href="{% url 'voting:vote_page_with_id' voter.voter_id %}" class="dashboard-link-card h-100 d-flex flex-column justify-content-center">
+            {% else %}
+                <a href="{% url 'voting:vote_page' %}" class="dashboard-link-card h-100 d-flex flex-column justify-content-center">
+            {% endif %}
                 <div class="icon">
                     <i class="fas fa-vote-yea"></i>
                 </div>

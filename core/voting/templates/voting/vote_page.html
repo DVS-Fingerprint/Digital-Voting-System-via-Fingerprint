@@ -124,10 +124,10 @@
                     <!-- Vote summary will be populated here -->
                 </div>
                 <div class="d-flex justify-content-between">
-                    <button type="button" class="btn btn-secondary" onclick="goBackToVoting()">
+                    <button type="button" class="btn btn-secondary" id="back-to-voting-btn">
                         <i class="fas fa-arrow-left me-2"></i>Back to Voting
                     </button>
-                    <button type="button" class="btn btn-success" onclick="submitVotes()">
+                    <button type="button" class="btn btn-success" id="submit-votes-btn">
                         <i class="fas fa-check me-2"></i>Confirm & Submit
                     </button>
                 </div>
@@ -142,6 +142,8 @@
 
 {% block extra_js %}
 <script>
+// Cache busting - force reload of updated JavaScript
+console.log('Vote page JavaScript loaded - version: ' + Date.now());
 document.addEventListener('DOMContentLoaded', function() {
     let currentStep = 1;
     const totalSteps = parseInt('{{ posts|length }}');
@@ -235,6 +237,16 @@ document.addEventListener('DOMContentLoaded', function() {
         btn.addEventListener('click', function() {
             showVoteSummary();
         });
+    });
+
+    // Vote summary submit button click handler
+    document.getElementById('submit-votes-btn').addEventListener('click', function() {
+        submitVotes();
+    });
+
+    // Vote summary back button click handler
+    document.getElementById('back-to-voting-btn').addEventListener('click', function() {
+        goBackToVoting();
     });
 
     function updateVoteSelection(clickedBtn) {
@@ -367,6 +379,8 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function submitVotes() {
+        console.log('submitVotes function called');
+        
         // Prepare vote data for API submission
         const voteData = [];
         Object.keys(votes).forEach(postId => {
@@ -376,35 +390,46 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         });
 
+        console.log('Vote data:', voteData);
+
         // Show loading state
         const submitBtn = document.querySelector('#vote-summary-section .btn-success');
         const originalText = submitBtn.innerHTML;
         submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Submitting...';
         submitBtn.disabled = true;
 
-        // Get fingerprint_id from session or use a placeholder for demo
-        const fingerprint_id = '{% if voter.fingerprint_id %}{{ voter.fingerprint_id }}{% else %}demo_fingerprint{% endif %}';
+        // Get voter_id from the current voter
+        const voter_id = '{{ voter.voter_id }}';
+        
+        console.log('Voter ID:', voter_id);
 
         // Submit votes via API
-        fetch('/voting/api/cast-vote/', {
+        console.log('Making API request to /api/cast-vote/');
+        fetch('/api/cast-vote/', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
             },
             body: JSON.stringify({
-                fingerprint_id: fingerprint_id,
+                voter_id: voter_id,
                 votes: voteData
             })
         })
-        .then(response => response.json())
+        .then(response => {
+            console.log('Response status:', response.status);
+            return response.json();
+        })
         .then(data => {
+            console.log('Response data:', data);
             if (data.status === 'success') {
                 // Redirect to success page
-                window.location.href = '/voting/vote-success/';
+                console.log('Redirecting to success page: /vote-success/');
+                window.location.href = '/vote-success/';
             } else if (data.status === 'already_voted') {
+                console.log('Redirecting to already voted page: /already-voted/');
                 alert('You have already voted. Redirecting...');
-                window.location.href = '/voting/already-voted/';
+                window.location.href = '/already-voted/';
             } else {
                 alert('Error submitting vote: ' + (data.message || 'Unknown error'));
                 submitBtn.innerHTML = originalText;

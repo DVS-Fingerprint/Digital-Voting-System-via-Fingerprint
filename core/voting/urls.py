@@ -7,9 +7,11 @@ urlpatterns = [
     #ui views
     path('', views.home, name='home'),
     path('scanner/', views.scanner, name='scanner'),
+    path('voter-home/', views.voter_home, name='voter_home'),
   
     path('vote/', views.election_view, name='election_view'),
     path('cast-vote/', views.vote_page, name='vote_page'),
+    path('cast-vote/<str:voter_id>/', views.vote_page_with_id, name='vote_page_with_id'),
     path('vote-success/', views.vote_success, name='vote_success'),
     path('candidates/', views.candidate_list, name='candidate_list'),
     path('thank-you/', views.thankyou, name='thankyou'),
@@ -32,7 +34,7 @@ urlpatterns = [
     path('api/mark-trigger-used/', views.mark_trigger_used, name='mark-trigger-used'),
     path('api/get-pending-templates/', views.get_pending_templates, name='get_pending_templates'),
     path('api/match-template/', views.match_template, name='match_template'),
-    path('voter-home/<str:voter_id>/', views.voter_home, name='voter_home'),
+    path('voter-home/<str:voter_id>/', views.voter_home_with_id, name='voter_home_with_id'),
     path('api/scan-result/',views.scan_result, name='scan-result'),
 
     # ==========================
@@ -55,8 +57,10 @@ urlpatterns = [
         # New authentication and voting endpoints
         path('authenticate-voter/', views.authenticate_voter, name='authenticate_voter'),
         path('submit-vote/', views.submit_vote, name='submit_vote'),
-        # New fingerprint verification and vote casting endpoints
+        # New fingerprint verification endpoint
         path('fingerprint-verification/', views.fingerprint_verification, name='fingerprint_verification'),
-        path('cast-vote/', views.cast_vote, name='cast_vote'),
     ])),
+    
+    # Cast vote endpoint (moved outside nested api/ block)
+    path('api/cast-vote/', views.cast_vote, name='cast_vote'),
 ]
