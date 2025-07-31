@@ -2,6 +2,8 @@
 {% block title %}Register Voter | Digital Voting System{% endblock %}
 
 {% block extra_head %}
+{% load static %}
+
 <style>
 /* Professional dropdown styling */
 .custom-select-wrapper {
@@ -161,6 +163,9 @@
         
         <form method="post" novalidate class="needs-validation" id="voterForm">
           {% csrf_token %}
+
+          <input type="hidden" id="voter_id_field" value="{{ next_voter_id }}">
+ 
           {% if form.non_field_errors %}
             <div class="alert alert-danger">
               {{ form.non_field_errors }}
@@ -294,132 +299,20 @@
     </div>
   </div>
 </div>
+<div class="d-flex justify-content-between align-items-center mt-3">
+  <a href="{% url 'voting:new_voter' %}" class="btn btn-warning">
+    <i class="fas fa-user-plus me-2"></i>New Voter
+  </a>
+  <button type="submit" class="btn btn-success btn-lg" id="registerBtn" {% if not has_pending_template %}disabled{% endif %}>
+    <i class="fas fa-save me-2"></i>Register Voter
+  </button>
+</div>
+
 {% endblock %}
 
-<script>
-let scanInterval;
-let currentVoterId = null;
-
-document.addEventListener('DOMContentLoaded', function() {
-    const startScanBtn = document.getElementById('startScanBtn');
-    const checkScanBtn = document.getElementById('checkScanBtn');
-    const scanStatus = document.getElementById('scanStatus');
-    const scanStatusText = document.getElementById('scanStatusText');
-    const registerBtn = document.getElementById('registerBtn');
-    const templateField = document.getElementById('id_template_hex');
-    const voterIdField = document.getElementById('id_voter_id');
-
-    // Get the current voter ID from the form
-    currentVoterId = voterIdField.value;
-    console.log('🔍 Initial voter_id value:', currentVoterId);
-    console.log('🔍 voterIdField element:', voterIdField);
-
-    startScanBtn.addEventListener('click', function() {
-        // Re-get the voter ID in case it changed
-        currentVoterId = voterIdField.value;
-        console.log('🔍 Current voter_id on button click:', currentVoterId);
-        
-        if (!currentVoterId) {
-            alert('Please ensure Voter ID is filled');
-            return;
-        }
-
-        // Trigger scan
-        console.log('🔍 Triggering scan for voter_id:', currentVoterId);
-        fetch('/api/trigger-scan/', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                action: 'register',
-                voter_id: currentVoterId
-            })
-        })
-        .then(response => {
-            console.log('🔍 Response status:', response.status);
-            return response.json();
-        })
-        .then(data => {
-            console.log('🔍 Response data:', data);
-            if (data.status === 'success') {
-                startScanBtn.style.display = 'none';
-                checkScanBtn.style.display = 'block';
-                scanStatus.style.display = 'block';
-                scanStatusText.textContent = 'Scan triggered! Place finger on sensor...';
-                
-                // Start polling for scan completion
-                startScanPolling();
-            } else {
-                alert('Error: ' + data.error);
-            }
-        })
-        .catch(error => {
-            console.error('❌ Error:', error);
-            alert('Error triggering scan');
-        });
-    });
-
-    function startScanPolling() {
-        scanInterval = setInterval(() => {
-            checkForScannedTemplate();
-        }, 2000); // Check every 2 seconds
-    }
-
-    function checkForScannedTemplate() {
-        fetch('/api/latest-scanned-template/')
-        .then(response => response.json())
-        .then(data => {
-            if (data.status === 'success' && data.is_temporary) {
-                // Found a newly scanned template
-                clearInterval(scanInterval);
-                hideScanStatus();
-                showSuccessMessage();
-                
-                // Refresh the form to show the new template in dropdown
-                location.reload();
-            }
-        })
-        .catch(error => {
-            console.error('Error checking for template:', error);
-        });
-    }
-
-    function hideScanStatus() {
-        scanStatus.style.display = 'none';
-        startScanBtn.style.display = 'block';
-        checkScanBtn.style.display = 'none';
-    }
-
-    function showSuccessMessage() {
-        const successAlert = document.createElement('div');
-        successAlert.className = 'alert alert-success alert-dismissible fade show';
-        successAlert.innerHTML = `
-            <i class="fas fa-check-circle me-2"></i>Fingerprint scanned successfully! Template is now available in the dropdown.
-            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-        `;
-        
-        const form = document.getElementById('voterForm');
-        form.insertBefore(successAlert, form.firstChild);
-        
-        // Auto-dismiss after 5 seconds
-        setTimeout(() => {
-            successAlert.remove();
-        }, 5000);
-    }
-
-    // Auto-populate voter ID when form loads
-    if (voterIdField && !voterIdField.value) {
-        voterIdField.value = currentVoterId;
-    }
-
-    // Enable register button when template is selected
-    templateField.addEventListener('change', function() {
-        if (templateField.value) {
-            registerBtn.disabled = false;
-        } else {
-            registerBtn.disabled = true;
-        }
-    });
-});
-</script>
+{% block extra_scripts %}
+<script src="{% static 'js/scriptreg.js' %}"></script>
+{% endblock %}
+{% block extra_js %}
+  {{ block.super }}
+{% endblock %}

@@ -1,156 +1,30 @@
 {% extends 'voting/base.html' %}
-{% load i18n %}
-{% block title %}{% trans "Fingerprint Verification" %}{% endblock %}
+{% load static %}
+
+{% block title %}Fingerprint Scanner{% endblock %}
 
 {% block content %}
 <div class="content-card verification-card">
-    <h4>{% trans "Fingerprint Verification" %}</h4>
+    <h4>Fingerprint Verification</h4>
+
+    <button id="scan-btn" class="btn btn-primary mt-3">Scan Fingerprint</button>
     
-    <div id="scan-status" class="my-5">
-        <i id="fingerprint-icon" class="fas fa-fingerprint fingerprint-icon"></i>
-        <div id="spinner" style="display:none; font-size:2.5rem; color:#0dcaf0;">
-            <i class="fas fa-spinner fa-spin"></i>
-        </div>
-        <p class="lead text-muted" id="scan-instruction">{% trans "Place your finger on the scanner" %}</p>
-        <div class="progress" style="height: 6px;">
-            <div id="scan-progress-bar" class="progress-bar bg-info" role="progressbar" style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
-        </div>
-        <p id="scan-message" class="mt-3"></p>
+    <div id="scan-status" class="mt-3 text-info"></div>
+
+    <div id="proceed-container" class="mt-4" style="display:none;">
+        <button id="proceed-btn" class="btn btn-success">
+            Proceed to Voting
+        </button>
     </div>
-    
+
     <div class="mt-4">
         <a href="{% url 'voting:home' %}" class="btn btn-secondary-biomatdaan">
-            <i class="fas fa-arrow-left me-2"></i>{% trans "Cancel" %}
+            <i class="fas fa-arrow-left me-2"></i>Cancel
         </a>
     </div>
 </div>
 {% endblock %}
 
 {% block extra_js %}
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-    const progressBar = document.getElementById('scan-progress-bar');
-    const scanMessage = document.getElementById('scan-message');
-    const fingerprintIcon = document.getElementById('fingerprint-icon');
-    const spinner = document.getElementById('spinner');
-    const scanInstruction = document.getElementById('scan-instruction');
-    let isScanning = false;
-
-    function showSpinner(message) {
-        fingerprintIcon.style.display = 'none';
-        spinner.style.display = 'block';
-        scanInstruction.textContent = message || 'Verifying...';
-    }
-    
-    function hideSpinner() {
-        fingerprintIcon.style.display = 'block';
-        spinner.style.display = 'none';
-        scanInstruction.textContent = 'Place your finger on the scanner';
-    }
-
-    // Function to simulate fingerprint scanning
-    function startScan() {
-        if (isScanning) return;
-        isScanning = true;
-        
-        scanMessage.textContent = 'Waiting for scanner...';
-        let progress = 0;
-
-        const interval = setInterval(() => {
-            progress += 25;
-            progressBar.style.width = progress + '%';
-            scanMessage.textContent = `Scanning... (${progress}%)`;
-
-            if (progress >= 100) {
-                clearInterval(interval);
-                showSpinner('Verifying...');
-                
-                // Simulate fingerprint verification with ESP32
-                setTimeout(() => {
-                    verifyFingerprint();
-                }, 1000);
-            }
-        }, 800);
-    }
-
-    // Function to verify fingerprint with backend using new similarity matching
-    function verifyFingerprint() {
-        // In a real scenario, this would get the fingerprint template from ESP32
-        // For demo purposes, we'll simulate with a test template
-        // In production, this would be the actual template from ESP32
-        const testTemplateHex = 'test_template_hex_data'; // Replace with actual ESP32 template data
-        
-        fetch('/voting/api/scanner-authenticate/', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]')?.value || ''
-            },
-            body: JSON.stringify({
-                template_hex: testTemplateHex
-            })
-        })
-        .then(response => response.json())
-        .then(data => {
-            hideSpinner();
-            if (data.status === 'ok') {
-                scanMessage.textContent = `Welcome, ${data.name}! Redirecting...`;
-                progressBar.className = 'progress-bar bg-success';
-                
-                // Set session for authenticated voter
-                setTimeout(() => {
-                    window.location.href = '/voting/voter-home/';
-                }, 1500);
-            } else if (data.status === 'already_voted') {
-                scanMessage.textContent = `Hello ${data.name}, you have already voted.`;
-                progressBar.className = 'progress-bar bg-warning';
-                
-                setTimeout(() => {
-                    window.location.href = '/voting/already-voted/';
-                }, 2000);
-            } else if (data.status === 'not_found') {
-                scanMessage.textContent = 'Fingerprint not recognized. Please contact administrator.';
-                progressBar.className = 'progress-bar bg-danger';
-                isScanning = false;
-            } else {
-                scanMessage.textContent = 'Verification failed. Please try again.';
-                progressBar.className = 'progress-bar bg-danger';
-                isScanning = false;
-            }
-        })
-        .catch(error => {
-            hideSpinner();
-            scanMessage.textContent = 'Connection error. Please try again.';
-            console.error('Error:', error);
-            progressBar.className = 'progress-bar bg-danger';
-            isScanning = false;
-        });
-    }
-
-    // Start scanning when page loads
-    startScan();
-
-    // Add manual retry button if needed
-    const retryButton = document.createElement('button');
-    retryButton.className = 'btn btn-outline-primary mt-3';
-    retryButton.innerHTML = '<i class="fas fa-redo me-2"></i>Retry Scan';
-    retryButton.style.display = 'none';
-    retryButton.onclick = function() {
-        progressBar.className = 'progress-bar bg-info';
-        progressBar.style.width = '0%';
-        isScanning = false;
-        startScan();
-        this.style.display = 'none';
-    };
-    
-    document.querySelector('#scan-status').appendChild(retryButton);
-
-    // Show retry button after error
-    setTimeout(() => {
-        if (scanMessage.textContent.includes('error') || scanMessage.textContent.includes('failed')) {
-            retryButton.style.display = 'block';
-        }
-    }, 5000);
-});
-</script>
-{% endblock %} 
+<script src="{% static 'js/scanner.js' %}"></script>
+{% endblock %}
