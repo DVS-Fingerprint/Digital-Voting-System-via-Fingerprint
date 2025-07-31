@@ -130,8 +130,6 @@ def admin_dashboard(request):
 def home(request):
     return render(request, 'voting/home.html')
 
-<<<<<<< HEAD
-
 def voter_home(request):
     """Render the voter home page for authenticated voters"""
     voter_id = request.session.get('authenticated_voter_id')
@@ -147,9 +145,6 @@ def voter_home(request):
     
     return render(request, 'voting/voter_home.html', {'voter': voter})
 
-
-=======
->>>>>>> origin/feature/smriti
 def candidate_list(request):
     posts = Post.objects.prefetch_related('candidates').all()
     return render(request, 'voting/candidate_list.html', {'posts': posts})
@@ -842,8 +837,6 @@ def get_latest_scanned_template(request):
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
 
-<<<<<<< HEAD
-
 @csrf_exempt
 @require_http_methods(["POST"])
 def fingerprint_verification(request):
@@ -1054,7 +1047,7 @@ def vote_success(request):
             pass
     
     return render(request, 'voting/vote_success.html', {'voter': voter})
-=======
+
 @csrf_exempt
 @staff_member_required
 def get_pending_templates(request):
@@ -1093,7 +1086,7 @@ def new_voter(request):
     # Redirect back to register voter page
     return redirect('voting:register_voter')
 
-def voter_home(request, voter_id):
+def voter_home_with_id(request, voter_id):
     voter = get_object_or_404(Voter, voter_id=voter_id)
     return render(request, 'voting/voter_home.html', {'voter': voter})
 
@@ -1124,4 +1117,3 @@ def scan_result(request):
             "status": "error",
             "message": "Fingerprint not matched"
         })
->>>>>>> origin/feature/smriti

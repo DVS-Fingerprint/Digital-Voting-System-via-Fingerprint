@@ -1,14 +1,16 @@
-#include <WiFi.h>
+#include <WiFi.h> 
 #include <HTTPClient.h>
+#include <ArduinoJson.h>
 
 // Wi-Fi credentials
-const char* ssid = "Sameer837__wlink";
-const char* password = "9819158546";
+const char* ssid = "smriti32_fpkhr_2.4";
+const char* password = "976818582335_65";
 
 // Django API endpoints
-const char* TRIGGER_URL = "http://192.168.2.100:8000/api/scan-trigger/";
-const char* UPLOAD_URL  = "http://192.168.2.100:8000/api/upload-template/";
-const char* MATCH_URL   = "http://192.168.2.100:8000/api/match-template/";
+const char* TRIGGER_URL = "http://192.168.1.96:8000/api/scan-trigger/";
+const char* UPLOAD_URL  = "http://192.168.1.96:8000/api/upload-template/";
+const char* MATCH_URL   = "http://192.168.1.96:8000/api/match-template/";
+const char* MARK_USED_URL = "http://192.168.1.96:8000/api/mark-trigger-used/";
 
 // Fingerprint sensor UART config
 #define RX_PIN 16
@@ -57,7 +59,7 @@ String base64Encode(const uint8_t* data, size_t len) {
   return output;
 }
 
-// Write packet to sensor
+// Write packet to sensor (your existing packet logic unchanged)
 void writePacket(uint8_t* packet, uint16_t length) {
   SENSOR.write(0xEF); SENSOR.write(0x01);
   SENSOR.write((AS608_ADDRESS >> 24) & 0xFF);
@@ -78,7 +80,7 @@ void writePacket(uint8_t* packet, uint16_t length) {
   SENSOR.write((checksum >> 0) & 0xFF);
 }
 
-// Wait for ACK with expected code
+// Wait for ACK with expected code (unchanged)
 bool getACK(uint8_t expectedCode) {
   long timeout = millis() + 2000;
   while (SENSOR.available() < 12 && millis() < timeout);
@@ -89,7 +91,7 @@ bool getACK(uint8_t expectedCode) {
   return (response[6] == 0x07 && response[9] == expectedCode);
 }
 
-// Capture and convert fingerprint image
+// Capture and convert fingerprint image (unchanged)
 bool captureAndConvert() {
   uint8_t cmd1[] = {CMD_GET_IMAGE};
   writePacket(cmd1, 3);
@@ -103,7 +105,7 @@ bool captureAndConvert() {
   return true;
 }
 
-// Download template from sensor buffer #1
+// Download template from sensor buffer #1 (unchanged)
 bool downloadTemplate(uint8_t* buf) {
   uint8_t cmd[] = {CMD_UPLOAD_TEMPLATE, CMD_CHAR_BUFFER_1};
   writePacket(cmd, 4);
@@ -158,11 +160,15 @@ void waitForFingerToBeRemoved() {
   delay(500);
 }
 
-// Poll backend for scan trigger (returns voter_id or -1 if none)
-int pollForScanTrigger(String& action_out) {
+// Poll backend for scan trigger (returns voter_id as string, action string, and trigger id)
+bool pollForScanTrigger(String &voter_id_out, String &action_out, int &trigger_id_out) {
+  voter_id_out = "";
+  action_out = "";
+  trigger_id_out = -1;
+
   if (WiFi.status() != WL_CONNECTED) {
     Serial.println("WiFi not connected");
-    return -1;
+    return false;
   }
 
   HTTPClient http;
@@ -171,37 +177,37 @@ int pollForScanTrigger(String& action_out) {
   if (httpCode != 200) {
     Serial.printf("Failed to get scan trigger, code: %d\n", httpCode);
     http.end();
-    return -1;
+    return false;
   }
 
   String payload = http.getString();
+  Serial.println("📦 Received scan trigger JSON:");
+  Serial.println(payload);
   http.end();
 
-  // Parse JSON manually (simple parsing)
-  int userIdx = payload.indexOf("voter_id");
-  int actionIdx = payload.indexOf("action");
+  StaticJsonDocument<256> doc;
+  DeserializationError error = deserializeJson(doc, payload);
+  if (error) {
+    Serial.print(F("deserializeJson() failed: "));
+    Serial.println(error.f_str());
+    return false;
+  }
 
-  if (userIdx < 0 || actionIdx < 0) return -1;
+  // Extract fields
+  if (doc.containsKey("id")) trigger_id_out = doc["id"];
+  if (doc.containsKey("voter_id")) voter_id_out = doc["voter_id"].as<String>();
+  if (doc.containsKey("action")) action_out = doc["action"].as<String>();
 
-  int colonUser = payload.indexOf(":", userIdx);
-  int commaUser = payload.indexOf(",", userIdx);
-  if (colonUser < 0 || commaUser < 0) return -1;
-
-  String userIdStr = payload.substring(colonUser + 1, commaUser);
-  userIdStr.trim();
-
-  int colonAction = payload.indexOf(":", actionIdx);
-  int commaAction = payload.indexOf("}", actionIdx);
-  if (colonAction < 0 || commaAction < 0) return -1;
-
-  action_out = payload.substring(colonAction + 2, commaAction - 1); // assumes "action":"register"
+  voter_id_out.trim();
   action_out.trim();
 
-  return userIdStr.toInt();
-}
+  Serial.printf("⚡ Trigger received: id=%d voter_id=%s action=%s\n", trigger_id_out, voter_id_out.c_str(), action_out.c_str());
 
+  return true;
+}
 // Send template to backend
-bool sendTemplateToBackend(const String& base64Data, int voter_id, const String& action) {
+// Add triggerId param to this function
+bool sendTemplateToBackend(const String& base64Data, const String& voter_id, const String& action, int trigger_id) {
   if (WiFi.status() != WL_CONNECTED) {
     Serial.println("WiFi not connected.");
     return false;
@@ -214,9 +220,11 @@ bool sendTemplateToBackend(const String& base64Data, int voter_id, const String&
 
   String payload;
   if (action == "register") {
-    payload = "{\"user_id\": " + String(voter_id) + ", \"template_hex\": \"" + base64Data + "\"}";
+    // For registration, send voter_id + template
+    payload = "{\"voter_id\": \"" + voter_id + "\", \"template\": \"" + base64Data + "\"}";
   } else {
-    payload = "{\"template\": \"" + base64Data + "\"}";
+    // For matching, send trigger_id + template (this is the fix)
+    payload = "{\"trigger_id\": " + String(trigger_id) + ", \"template\": \"" + base64Data + "\"}";
   }
 
   int res = http.POST(payload);
@@ -227,6 +235,33 @@ bool sendTemplateToBackend(const String& base64Data, int voter_id, const String&
     return true;
   } else {
     Serial.printf("❌ HTTP POST failed: %s\n", http.errorToString(res).c_str());
+    http.end();
+    return false;
+  }
+}
+
+
+
+// Mark the trigger used after successful scan & upload
+bool markTriggerUsed(int triggerId) {
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.println("WiFi not connected.");
+    return false;
+  }
+  HTTPClient http;
+  http.begin(MARK_USED_URL);
+  http.addHeader("Content-Type", "application/json");
+
+  String payload = "{\"id\": " + String(triggerId) + "}";
+
+  int res = http.POST(payload);
+  if (res > 0) {
+    String response = http.getString();
+    Serial.printf("✅ Marked trigger used: %s\n", response.c_str());
+    http.end();
+    return true;
+  } else {
+    Serial.printf("❌ Failed to mark trigger used: %s\n", http.errorToString(res).c_str());
     http.end();
     return false;
   }
@@ -251,14 +286,21 @@ void setup() {
 void loop() {
   Serial.println("⏳ Polling backend for scan trigger...");
   String action = "";
-  int voter_id = pollForScanTrigger(action);
+  String voter_id = "";
+  int trigger_id = -1;
 
-  if (voter_id == -1) {
+  if (!pollForScanTrigger(voter_id, action, trigger_id)) {
+    Serial.println("❌ Failed to parse scan trigger");
     delay(3000);
-    return;  // no trigger
+    return;
   }
 
-  Serial.printf("⚡ Trigger received for voter_id=%d action=%s\n", voter_id, action.c_str());
+  if (trigger_id == -1) {
+    delay(3000); // no trigger found, wait and poll again
+    return;
+  }
+
+  Serial.printf("⚡ Trigger received: id=%d voter_id=%s action=%s\n", trigger_id, voter_id.c_str(), action.c_str());
   Serial.println("👉 Place finger on sensor...");
 
   long start_time = millis();
@@ -287,8 +329,13 @@ void loop() {
   Serial.println("✅ Template captured. Encoding...");
   String base64Template = base64Encode(templateBuffer, TEMPLATE_SIZE);
 
-  if (sendTemplateToBackend(base64Template, voter_id, action)) {
+if (sendTemplateToBackend(base64Template, voter_id, action, trigger_id)) {
     Serial.println("✅ Template sent successfully.");
+
+    // Now mark the trigger used on backend
+    if (!markTriggerUsed(trigger_id)) {
+      Serial.println("❌ Failed to mark trigger used.");
+    }
   } else {
     Serial.println("❌ Failed to send template.");
   }
