@@ -124,8 +124,19 @@ def home(request):
 
 
 def voter_home(request):
-    # For development, just show the page without auth
-    return render(request, 'voting/voter_home.html')
+    """Render the voter home page for authenticated voters"""
+    voter_id = request.session.get('authenticated_voter_id')
+    voter = None
+    
+    if voter_id:
+        try:
+            voter = Voter.objects.get(id=voter_id)
+            if voter.has_voted:
+                return redirect('voting:already_voted')
+        except Voter.DoesNotExist:
+            pass
+    
+    return render(request, 'voting/voter_home.html', {'voter': voter})
 
 
 def candidate_list(request):
@@ -745,3 +756,215 @@ def get_latest_scanned_template(request):
             })
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def fingerprint_verification(request):
+    """Verify fingerprint and check if voter can vote"""
+    try:
+        data = json.loads(request.body)
+        fingerprint_id = data.get('fingerprint_id')
+        
+        if not fingerprint_id:
+            return JsonResponse({
+                'status': 'error',
+                'message': 'Fingerprint ID is required'
+            }, status=400)
+        
+        # Find voter by fingerprint_id
+        try:
+            voter = Voter.objects.get(fingerprint_id=fingerprint_id)
+            
+            # Check if voter has already voted
+            if voter.has_voted:
+                ActivityLog.objects.create(action=f'Fingerprint verification attempt by already voted voter: {voter.name} (ID: {voter.voter_id})')
+                return JsonResponse({
+                    'status': 'already_voted',
+                    'message': 'You have already voted',
+                    'voter_name': voter.name,
+                    'voter_id': voter.voter_id
+                })
+            
+            # Check if there's an active voting session
+            session = VotingSession.objects.filter(is_active=True).first()
+            if not session:
+                return JsonResponse({
+                    'status': 'no_session',
+                    'message': 'Voting is not currently active'
+                })
+            
+            # Set session for authenticated voter
+            request.session['authenticated_voter_id'] = voter.id
+            request.session.modified = True
+            
+            # Voter is verified and can vote
+            ActivityLog.objects.create(action=f'Fingerprint verification successful for voter: {voter.name} (ID: {voter.voter_id})')
+            return JsonResponse({
+                'status': 'verified',
+                'message': 'Fingerprint verified successfully',
+                'voter_name': voter.name,
+                'voter_id': voter.voter_id,
+                'redirect_url': '/voting/cast-vote/'
+            })
+            
+        except Voter.DoesNotExist:
+            ActivityLog.objects.create(action=f'Fingerprint verification failed - voter not found for fingerprint_id: {fingerprint_id}')
+            return JsonResponse({
+                'status': 'not_found',
+                'message': 'Voter not found with this fingerprint'
+            })
+            
+    except json.JSONDecodeError:
+        return JsonResponse({
+            'status': 'error',
+            'message': 'Invalid JSON data'
+        }, status=400)
+    except Exception as e:
+        ActivityLog.objects.create(action=f'Fingerprint verification error: {str(e)}')
+        return JsonResponse({
+            'status': 'error',
+            'message': f'Verification error: {str(e)}'
+        }, status=500)
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def cast_vote(request):
+    """Cast vote for verified voter"""
+    try:
+        data = json.loads(request.body)
+        fingerprint_id = data.get('fingerprint_id')
+        votes = data.get('votes', [])
+        
+        if not fingerprint_id:
+            return JsonResponse({
+                'status': 'error',
+                'message': 'Fingerprint ID is required'
+            }, status=400)
+        
+        if not votes:
+            return JsonResponse({
+                'status': 'error',
+                'message': 'No votes provided'
+            }, status=400)
+        
+        # Find voter by fingerprint_id
+        try:
+            voter = Voter.objects.get(fingerprint_id=fingerprint_id)
+            
+            # Double-check if voter has already voted (race condition protection)
+            if voter.has_voted:
+                ActivityLog.objects.create(action=f'Vote attempt by already voted voter: {voter.name} (ID: {voter.voter_id})')
+                return JsonResponse({
+                    'status': 'already_voted',
+                    'message': 'You have already voted',
+                    'voter_name': voter.name
+                })
+            
+            # Check if there's an active voting session
+            session = VotingSession.objects.filter(is_active=True).first()
+            if not session:
+                return JsonResponse({
+                    'status': 'no_session',
+                    'message': 'Voting is not currently active'
+                })
+            
+            # Process votes within a transaction
+            with transaction.atomic():
+                # Re-check has_voted status within transaction
+                voter = Voter.objects.select_for_update().get(fingerprint_id=fingerprint_id)
+                if voter.has_voted:
+                    return JsonResponse({
+                        'status': 'already_voted',
+                        'message': 'You have already voted'
+                    })
+                
+                # Record votes
+                for vote_item in votes:
+                    post_id = vote_item.get('post')
+                    candidate_id = vote_item.get('candidate')
+                    
+                    if not post_id or not candidate_id:
+                        continue
+                    
+                    try:
+                        post = Post.objects.get(id=post_id)
+                        candidate = Candidate.objects.get(id=candidate_id, post=post)
+                        
+                        # Check if voter already voted for this post
+                        existing_vote = Vote.objects.filter(voter=voter, post=post).first()
+                        if existing_vote:
+                            continue  # Skip if already voted for this post
+                        
+                        Vote.objects.create(voter=voter, candidate=candidate, post=post)
+                        
+                    except (Post.DoesNotExist, Candidate.DoesNotExist):
+                        continue
+                
+                # Mark voter as having voted
+                voter.has_voted = True
+                voter.last_vote_attempt = timezone.now()
+                voter.save()
+            
+            ActivityLog.objects.create(action=f'Vote cast successfully by voter: {voter.name} (ID: {voter.voter_id})')
+            
+            return JsonResponse({
+                'status': 'success',
+                'message': 'Vote cast successfully',
+                'voter_name': voter.name,
+                'timestamp': voter.last_vote_attempt.isoformat()
+            })
+            
+        except Voter.DoesNotExist:
+            ActivityLog.objects.create(action=f'Vote attempt by non-existent voter with fingerprint_id: {fingerprint_id}')
+            return JsonResponse({
+                'status': 'not_found',
+                'message': 'Voter not found'
+            })
+            
+    except json.JSONDecodeError:
+        return JsonResponse({
+            'status': 'error',
+            'message': 'Invalid JSON data'
+        }, status=400)
+    except Exception as e:
+        ActivityLog.objects.create(action=f'Vote casting error: {str(e)}')
+        return JsonResponse({
+            'status': 'error',
+            'message': f'Vote error: {str(e)}'
+        }, status=500)
+
+
+def vote_page(request):
+    """Render the voting page for verified voters"""
+    voter_id = request.session.get('authenticated_voter_id')
+    if not voter_id:
+        return redirect('voting:scanner')
+    
+    try:
+        voter = Voter.objects.get(id=voter_id)
+        if voter.has_voted:
+            return redirect('voting:already_voted')
+        
+        posts = Post.objects.prefetch_related('candidates').all()
+        return render(request, 'voting/vote_page.html', {
+            'voter': voter,
+            'posts': posts
+        })
+    except Voter.DoesNotExist:
+        return redirect('voting:scanner')
+
+
+def vote_success(request):
+    """Render the vote success page"""
+    voter_id = request.session.get('authenticated_voter_id')
+    voter = None
+    
+    if voter_id:
+        try:
+            voter = Voter.objects.get(id=voter_id)
+        except Voter.DoesNotExist:
+            pass
+    
+    return render(request, 'voting/vote_success.html', {'voter': voter})

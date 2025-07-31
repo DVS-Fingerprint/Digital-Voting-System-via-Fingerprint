@@ -9,6 +9,8 @@ urlpatterns = [
     path('scanner/', views.scanner, name='scanner'),
     path('voter-home/', views.voter_home, name='voter_home'),
     path('vote/', views.election_view, name='election_view'),
+    path('cast-vote/', views.vote_page, name='vote_page'),
+    path('vote-success/', views.vote_success, name='vote_success'),
     path('candidates/', views.candidate_list, name='candidate_list'),
     path('thank-you/', views.thankyou, name='thankyou'),
     path('already-voted/', views.already_voted, name='already_voted'),
@@ -47,5 +49,8 @@ urlpatterns = [
         # New authentication and voting endpoints
         path('authenticate-voter/', views.authenticate_voter, name='authenticate_voter'),
         path('submit-vote/', views.submit_vote, name='submit_vote'),
+        # New fingerprint verification and vote casting endpoints
+        path('fingerprint-verification/', views.fingerprint_verification, name='fingerprint_verification'),
+        path('cast-vote/', views.cast_vote, name='cast_vote'),
     ])),
 ]

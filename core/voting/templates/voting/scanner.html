@@ -24,6 +24,9 @@
         </a>
     </div>
 </div>
+
+<!-- CSRF Token -->
+{% csrf_token %}
 {% endblock %}
 
 {% block extra_js %}
@@ -73,45 +76,54 @@ document.addEventListener('DOMContentLoaded', function() {
         }, 800);
     }
 
-    // Function to verify fingerprint with backend using new similarity matching
+    // Function to verify fingerprint with backend using new fingerprint verification endpoint
     function verifyFingerprint() {
         // In a real scenario, this would get the fingerprint template from ESP32
-        // For demo purposes, we'll simulate with a test template
-        // In production, this would be the actual template from ESP32
-        const testTemplateHex = 'test_template_hex_data'; // Replace with actual ESP32 template data
+        // For demo purposes, we'll simulate with a test fingerprint_id
+        // In production, this would be the actual fingerprint_id from ESP32
+        const testFingerprintId = 'F123456'; // Replace with actual ESP32 fingerprint_id data
         
-        fetch('/voting/api/scanner-authenticate/', {
+        fetch('/voting/api/fingerprint-verification/', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]')?.value || ''
             },
             body: JSON.stringify({
-                template_hex: testTemplateHex
+                fingerprint_id: testFingerprintId
             })
         })
         .then(response => response.json())
         .then(data => {
             hideSpinner();
-            if (data.status === 'ok') {
-                scanMessage.textContent = `Welcome, ${data.name}! Redirecting...`;
+            
+            if (data.status === 'verified') {
+                scanMessage.textContent = `Welcome, ${data.voter_name}! Redirecting to voting...`;
                 progressBar.className = 'progress-bar bg-success';
                 
                 // Set session for authenticated voter
                 setTimeout(() => {
-                    window.location.href = '/voting/voter-home/';
+                    window.location.href = '/voting/cast-vote/';
                 }, 1500);
+                
             } else if (data.status === 'already_voted') {
-                scanMessage.textContent = `Hello ${data.name}, you have already voted.`;
+                scanMessage.textContent = `Hello ${data.voter_name}, you have already voted.`;
                 progressBar.className = 'progress-bar bg-warning';
                 
                 setTimeout(() => {
                     window.location.href = '/voting/already-voted/';
                 }, 2000);
+                
             } else if (data.status === 'not_found') {
                 scanMessage.textContent = 'Fingerprint not recognized. Please contact administrator.';
                 progressBar.className = 'progress-bar bg-danger';
                 isScanning = false;
+                
+            } else if (data.status === 'no_session') {
+                scanMessage.textContent = 'Voting is not currently active. Please try again later.';
+                progressBar.className = 'progress-bar bg-warning';
+                isScanning = false;
+                
             } else {
                 scanMessage.textContent = 'Verification failed. Please try again.';
                 progressBar.className = 'progress-bar bg-danger';
