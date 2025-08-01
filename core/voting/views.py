@@ -424,8 +424,13 @@ def already_voted(request):
     if voter_id:
         try:
             voter = Voter.objects.get(id=voter_id)
+            # Log for debugging
+            print(f"🔍 Already voted page - Session voter_id: {voter_id}, Voter name: {voter.name}, Voter ID: {voter.voter_id}")
         except Voter.DoesNotExist:
+            print(f"❌ Already voted page - Voter with ID {voter_id} not found")
             pass
+    else:
+        print(f"❌ Already voted page - No authenticated_voter_id in session")
     return render(request, 'voting/already_voted.html', {'voter': voter})
 
 
@@ -1036,6 +1041,9 @@ def match_template(request):
                 trigger.score = confidence_score
                 trigger.save()
                 
+                # Log for debugging
+                print(f"🔍 Match template - Already voted: Voter ID {matched_voter.id}, Name: {matched_voter.name}, Voter ID: {matched_voter.voter_id}")
+                
                 return JsonResponse({
                     'status': 'already_voted',
                     'message': 'Voter has already voted',
@@ -1416,6 +1424,9 @@ def scan_result(request):
             request.session['authenticated_voter_id'] = voter.id
             request.session.modified = True
             
+            # Log for debugging
+            print(f"🔍 Scan result - Already voted: Voter ID {voter.id}, Name: {voter.name}, Voter ID: {voter.voter_id}")
+            
             return JsonResponse({
                 "status": "already_voted",
                 "voter_id": voter.voter_id,
@@ -1522,6 +1533,19 @@ def calculate_template_quality(template_hex: str) -> float:
         
     except Exception:
         return 0.0
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def clear_session(request):
+    """Clear the authenticated_voter_id session to prevent conflicts"""
+    try:
+        request.session.pop('authenticated_voter_id', None)
+        request.session.modified = True
+        print(f"🔍 Session cleared for new scan")
+        return JsonResponse({'status': 'success', 'message': 'Session cleared'})
+    except Exception as e:
+        print(f"❌ Error clearing session: {e}")
+        return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
 
 @csrf_exempt
 @require_http_methods(["POST"])

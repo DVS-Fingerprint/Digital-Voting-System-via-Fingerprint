@@ -63,4 +63,6 @@ urlpatterns = [
     
     # Cast vote endpoint (moved outside nested api/ block)
     path('api/cast-vote/', views.cast_vote, name='cast_vote'),
+    # Session management endpoint
+    path('api/clear-session/', views.clear_session, name='clear_session'),
 ]

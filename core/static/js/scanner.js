@@ -11,6 +11,17 @@ document.addEventListener('DOMContentLoaded', function () {
     statusDiv.innerHTML = `<div class="text-info">Creating scan trigger...</div>`;
     proceedContainer.style.display = 'none';
 
+    // Clear any existing session to prevent conflicts
+    fetch('/api/clear-session/', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': getCSRFToken(),
+      }
+    }).catch(error => {
+      console.log('Session clear failed (non-critical):', error);
+    });
+
     fetch('/api/trigger-scan/', {
       method: 'POST',
       headers: {
