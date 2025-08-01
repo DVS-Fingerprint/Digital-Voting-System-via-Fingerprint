@@ -3,14 +3,14 @@
 #include <ArduinoJson.h>
 
 // Wi-Fi credentials
-const char* ssid = "Sameer837__wlink";
-const char* password = "9819158546";
+const char* ssid = "Galaxy M12 4B52";
+const char* password = "tess7430";
 
 // Django API endpoints
-const char* TRIGGER_URL = "http://192.168.2.100:8000/api/scan-trigger/";
-const char* UPLOAD_URL  = "http://192.168.2.100:8000/api/upload-template/";
-const char* MATCH_URL   = "http://192.168.2.100:8000/api/match-template/";
-const char* MARK_USED_URL = "http://192.168.2.100:8000/api/mark-trigger-used/";
+const char* TRIGGER_URL = "http://10.248.175.134:8000/api/scan-trigger/";
+const char* UPLOAD_URL  = "http://10.248.175.134:8000/api/upload-template/";
+const char* MATCH_URL   = "http://10.248.175.134:8000/api/match-template/";
+const char* MARK_USED_URL = "http://10.248.175.134:8000/api/mark-trigger-used/";
 
 // Fingerprint sensor UART config
 #define RX_PIN 16

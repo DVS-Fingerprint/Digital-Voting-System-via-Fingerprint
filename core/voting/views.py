@@ -252,12 +252,12 @@ def authenticate_fingerprint(request):
         except Exception:
             return Response({'error': 'Invalid template_hex format'}, status=400)
         
-        # Use advanced fingerprint matching algorithm
+        # Use simplified fingerprint matching algorithm
         templates = FingerprintTemplate.objects.select_related('voter').all()
         matched_voter, confidence_score, match_type = advanced_fingerprint_match(incoming_template, templates)
         
-        # Strict threshold for security
-        MINIMUM_CONFIDENCE_THRESHOLD = 55.0
+        # Balanced threshold for security while maintaining usability
+        MINIMUM_CONFIDENCE_THRESHOLD = 65.0
         
         if matched_voter and confidence_score >= MINIMUM_CONFIDENCE_THRESHOLD:
             # Check if voter has already voted
@@ -787,12 +787,12 @@ def fingerprint_authenticate(request):
         except Exception:
             return JsonResponse({'error': 'Invalid template_hex format.'}, status=400)
         
-        # Use advanced fingerprint matching algorithm
+        # Use simplified fingerprint matching algorithm
         templates = FingerprintTemplate.objects.select_related('voter').all()
         matched_voter, confidence_score, match_type = advanced_fingerprint_match(incoming_template, templates)
         
-        # Strict threshold for security
-        MINIMUM_CONFIDENCE_THRESHOLD = 55.0
+        # Balanced threshold for security while maintaining usability
+        MINIMUM_CONFIDENCE_THRESHOLD = 65.0
         
         if matched_voter and confidence_score >= MINIMUM_CONFIDENCE_THRESHOLD:
             if matched_voter.has_voted:
@@ -912,7 +912,7 @@ def calculate_similarity(template1: bytes, template2: bytes) -> float:
 
 def advanced_fingerprint_match(incoming_template: bytes, db_templates: list) -> tuple:
     """
-    Advanced fingerprint matching with multiple validation layers.
+    Simple but effective fingerprint matching.
     Returns (matched_voter, confidence_score, match_type)
     """
     if not incoming_template:
@@ -922,80 +922,35 @@ def advanced_fingerprint_match(incoming_template: bytes, db_templates: list) -> 
     best_score = 0.0
     match_type = "no_match"
     
-    # First pass: Quick screening with lower threshold
-    candidates = []
     for record in db_templates:
         try:
             db_template = bytes.fromhex(record.template_hex)
             if len(db_template) != len(incoming_template):
                 continue
                 
-            # Quick similarity check
-            quick_score = calculate_similarity(incoming_template, db_template)
-            if quick_score > 15.0:  # Lower threshold for initial screening
-                candidates.append((record, quick_score))
-        except Exception:
-            continue
-    
-    # Second pass: Detailed analysis of candidates
-    for record, initial_score in candidates:
-        try:
-            db_template = bytes.fromhex(record.template_hex)
+            # Simple similarity calculation
+            similarity_score = calculate_similarity(incoming_template, db_template)
             
-            # Detailed similarity calculation
-            detailed_score = calculate_similarity(incoming_template, db_template)
-            
-            # Additional validation checks
-            validation_passed = True
-            
-            # Check 1: Minimum byte similarity
+            # Basic byte-level comparison for additional validation
             byte_matches = sum(b1 == b2 for b1, b2 in zip(incoming_template, db_template))
             byte_similarity = (byte_matches / len(incoming_template)) * 100
-            if byte_similarity < 25.0:  # At least 25% of bytes should match
-                validation_passed = False
             
-            # Check 2: Pattern consistency
-            pattern_consistency = 0
-            for i in range(0, len(incoming_template) - 3, 4):
-                if i + 4 <= len(incoming_template) and i + 4 <= len(db_template):
-                    pattern1 = incoming_template[i:i+4]
-                    pattern2 = db_template[i:i+4]
-                    if pattern1 == pattern2:
-                        pattern_consistency += 1
+            # Combined score with emphasis on similarity
+            final_score = (similarity_score * 0.8 + byte_similarity * 0.2)
             
-            pattern_score = (pattern_consistency / (len(incoming_template) // 4)) * 100
-            if pattern_score < 10.0:  # At least 10% pattern consistency
-                validation_passed = False
-            
-            # Check 3: Structural integrity
-            structural_matches = 0
-            key_positions = [0, len(incoming_template)//4, len(incoming_template)//2, 3*len(incoming_template)//4, len(incoming_template)-1]
-            for pos in key_positions:
-                if pos < len(incoming_template) and pos < len(db_template):
-                    if incoming_template[pos] == db_template[pos]:
-                        structural_matches += 1
-            
-            structural_score = (structural_matches / len(key_positions)) * 100
-            if structural_score < 20.0:  # At least 20% of key positions should match
-                validation_passed = False
-            
-            # Final score calculation with validation
-            if validation_passed:
-                final_score = (detailed_score * 0.6 + byte_similarity * 0.2 + pattern_score * 0.1 + structural_score * 0.1)
+            if final_score > best_score:
+                best_score = final_score
+                best_match = record.voter
                 
-                if final_score > best_score:
-                    best_score = final_score
-                    best_match = record.voter
-                    
-                    # Determine match type based on score
-                    if final_score >= 85.0:
-                        match_type = "exact_match"
-                    elif final_score >= 70.0:
-                        match_type = "high_confidence"
-                    elif final_score >= 55.0:
-                        match_type = "medium_confidence"
-                    else:
-                        match_type = "low_confidence"
+                # Determine match type based on score
+                if final_score >= 85.0:
+                    match_type = "exact_match"
+                elif final_score >= 70.0:
+                    match_type = "high_confidence"
+                elif final_score >= 60.0:
+                    match_type = "medium_confidence"
+                else:
+                    match_type = "low_confidence"
                         
         except Exception:
             continue
@@ -1024,12 +979,12 @@ def match_template(request):
         # Decode incoming base64 fingerprint template to bytes
         incoming_template = base64.b64decode(template_b64)
 
-        # Use advanced fingerprint matching algorithm
+        # Use simplified fingerprint matching algorithm
         templates = FingerprintTemplate.objects.select_related('voter').all()
         matched_voter, confidence_score, match_type = advanced_fingerprint_match(incoming_template, templates)
 
-        # Strict threshold for security - only accept high confidence matches
-        MINIMUM_CONFIDENCE_THRESHOLD = 55.0  # Much higher than before for security
+        # Balanced threshold for security while maintaining usability
+        MINIMUM_CONFIDENCE_THRESHOLD = 65.0  # Balanced for security and usability
 
         if matched_voter and confidence_score >= MINIMUM_CONFIDENCE_THRESHOLD:
             # Additional security check: ensure voter hasn't already voted
