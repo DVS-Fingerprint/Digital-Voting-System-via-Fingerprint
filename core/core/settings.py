@@ -25,7 +25,7 @@ SECRET_KEY = 'django-insecure-7cte#m*+xq_8o%*2-k7ofi7v3lu*%32rqyvsop&s5kq=r(csv-
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['192.168.1.68', 'localhost', '127.0.0.1','192.168.2.101','192.168.1.96','192.168.1.90','192.168.1.71','192.168.2.105']
+ALLOWED_HOSTS = ['192.168.1.96', 'localhost', '127.0.0.1','192.168.2.101','192.168.1.96','192.168.1.90','192.168.1.71','192.168.2.105', '192.168.2.100']
 
 
 # Application definition
@@ -127,20 +127,25 @@ LOCALE_PATHS = [
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
-STATIC_URL = 'static/'
+# Static files (CSS, JavaScript, Images)
+# https://docs.djangoproject.com/en/5.2/howto/static-files/
 
+STATIC_URL = '/static/'
+STATIC_ROOT = BASE_DIR / 'staticfiles'
 STATICFILES_DIRS = [
-    os.path.join(BASE_DIR, 'static'),
+    BASE_DIR / 'static',
 ]
+
+# Media files
+MEDIA_URL = '/media/'
+MEDIA_ROOT = BASE_DIR / 'media'
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-MEDIA_URL = '/media/'
-MEDIA_ROOT = BASE_DIR / 'media'
-
+# REST Framework settings
 REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.AllowAny',
@@ -151,31 +156,6 @@ REST_FRAMEWORK = {
     ],
 }
 
+# CORS settings
 CORS_ALLOW_ALL_ORIGINS = True  # For development only
-
-STATIC_URL = '/static/'
-
-
-
-STATICFILES_DIRS = [BASE_DIR / 'static']
-
-from pathlib import Path
-
-BASE_DIR = Path(__file__).resolve().parent.parent
-
-TEMPLATES = [
-    {
-        'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [BASE_DIR / 'templates'],  # or add custom global template dirs here if needed
-        'APP_DIRS': True,  # THIS MUST BE True to find app templates like voting/templates/voting/base.html
-        'OPTIONS': {
-            'context_processors': [
-                'django.template.context_processors.debug',
-                'django.template.context_processors.request',
-                'django.contrib.auth.context_processors.auth',
-                'django.contrib.messages.context_processors.messages',
-            ],
-        },
-    },
-]
 

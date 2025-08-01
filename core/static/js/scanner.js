@@ -51,6 +51,14 @@ document.addEventListener('DOMContentLoaded', function () {
             matchedVoterId = data.voter_id;
             statusDiv.innerHTML = `<div class="text-success">Fingerprint matched: ${data.voter_name} (Score: ${data.score.toFixed(2)})</div>`;
             proceedContainer.style.display = 'block';
+          } else if (data.status === 'already_voted') {
+            clearInterval(pollInterval);
+            statusDiv.innerHTML = `<div class="text-warning">Already Voted: ${data.voter_name || 'This voter has already cast their vote'}</div>`;
+            scanBtn.disabled = false;
+            // Redirect to already voted page after a short delay
+            setTimeout(() => {
+              window.location.href = '/already-voted/';
+            }, 2000);
           } else if (data.status === 'error') {
             clearInterval(pollInterval);
             statusDiv.innerHTML = `<div class="text-danger">No match: ${data.message || 'Fingerprint not registered or unmatched'}</div>`;

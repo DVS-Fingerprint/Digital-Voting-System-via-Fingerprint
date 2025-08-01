@@ -158,6 +158,18 @@ body {
     border-left: 4px solid var(--red-accent);
 }
 
+.text-warning {
+    background-color: #fff3cd;
+    color: #856404;
+    border-left: 4px solid #ffc107;
+    border-radius: 8px;
+    padding: 1rem;
+    margin-bottom: 1rem;
+    font-weight: 500;
+}
+
+
+
 /* --- Main Content Cards --- */
 .content-card {
     background-color: var(--white);

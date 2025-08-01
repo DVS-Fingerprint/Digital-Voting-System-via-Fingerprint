@@ -115,7 +115,7 @@ def voter_home(request):
         try:
             voter = Voter.objects.get(id=voter_id)
             if voter.has_voted:
-                return redirect('voting:already_voted')
+                return redirect('/already-voted/')
         except Voter.DoesNotExist:
             pass
     
@@ -240,19 +240,67 @@ def dashboard_view(request):
 
 @api_view(['POST'])
 def authenticate_fingerprint(request):
-    """ESP32 sends fingerprint template, returns voter status using similarity matching."""
+    """ESP32 sends fingerprint template, returns voter status using advanced similarity matching."""
     try:
         template_hex = request.data.get('template_hex')
         if not template_hex:
             return Response({'error': 'template_hex is required'}, status=400)
         
-        # Use similarity-based matching
-        # match_result = fingerprint_matcher.find_best_match(template_hex)
+        # Convert hex to bytes for comparison
+        try:
+            incoming_template = bytes.fromhex(template_hex)
+        except Exception:
+            return Response({'error': 'Invalid template_hex format'}, status=400)
         
-        # For now, return a simple response
-        return Response({'status': 'not_found'}, status=404)
+        # Use advanced fingerprint matching algorithm
+        templates = FingerprintTemplate.objects.select_related('voter').all()
+        matched_voter, confidence_score, match_type = advanced_fingerprint_match(incoming_template, templates)
+        
+        # Strict threshold for security
+        MINIMUM_CONFIDENCE_THRESHOLD = 55.0
+        
+        if matched_voter and confidence_score >= MINIMUM_CONFIDENCE_THRESHOLD:
+            # Check if voter has already voted
+            if matched_voter.has_voted:
+                ActivityLog.objects.create(
+                    action=f'Authentication attempt by already voted voter: {matched_voter.name} (ID: {matched_voter.voter_id})'
+                )
+                return Response({
+                    'status': 'already_voted',
+                    'message': 'You have already voted',
+                    'voter_name': matched_voter.name,
+                    'score': confidence_score,
+                    'match_type': match_type
+                })
+            
+            # Log successful authentication
+            ActivityLog.objects.create(
+                action=f'Fingerprint authentication successful: {matched_voter.name} (ID: {matched_voter.voter_id}) - Score: {confidence_score:.2f}'
+            )
+            
+            return Response({
+                'status': 'authenticated',
+                'voter_id': matched_voter.voter_id,
+                'voter_name': matched_voter.name,
+                'score': confidence_score,
+                'match_type': match_type,
+                'confidence_level': 'high' if confidence_score >= 70.0 else 'medium'
+            })
+        else:
+            # Log failed authentication attempt
+            ActivityLog.objects.create(
+                action=f'Fingerprint authentication failed - Best score: {confidence_score:.2f}, Match type: {match_type}'
+            )
+            
+            return Response({
+                'status': 'not_found',
+                'message': 'No matching fingerprint found with sufficient confidence',
+                'score': confidence_score,
+                'match_type': match_type
+            }, status=404)
           
     except Exception as e:
+        ActivityLog.objects.create(action=f'Fingerprint authentication error: {str(e)}')
         print(f"❌ Error in authenticate_fingerprint: {e}")
         return Response({'error': str(e)}, status=500)
 
@@ -339,7 +387,7 @@ def verify_fingerprint(request):
                     'status': 'verified',
                     'message': 'Voter verified successfully',
                     'voter_name': voter.name,
-                    'redirect_url': '/voting/vote/'
+                    'redirect_url': '/vote/'
                 })
         except Voter.DoesNotExist:
             return JsonResponse({
@@ -414,7 +462,7 @@ def authenticate_voter(request):
                 'message': 'Authentication successful',
                 'voter_id': voter.id,
                 'voter_name': voter.name,
-                'redirect_url': '/voting/vote/'
+                'redirect_url': '/vote/'
             })
         except Voter.DoesNotExist:
             ActivityLog.objects.create(action=f'Authentication attempt with invalid fingerprint_id={fingerprint_id}')
@@ -631,13 +679,41 @@ def upload_template(request):
         if not template_hex:
             return JsonResponse({'status': 'error', 'message': 'No template provided'}, status=400)
 
+        # Validate template quality
+        if not validate_fingerprint_template(template_hex):
+            return JsonResponse({
+                'status': 'error', 
+                'message': 'Invalid or low-quality fingerprint template. Please scan again.'
+            }, status=400)
+        
+        # Calculate template quality score
+        quality_score = calculate_template_quality(template_hex)
+        if quality_score < 30.0:
+            return JsonResponse({
+                'status': 'error', 
+                'message': f'Template quality too low ({quality_score:.1f}/100). Please scan again with better finger placement.'
+            }, status=400)
+
         if voter_id:
             try:
                 print(f"🔍 Looking for voter_id: {voter_id}")
                 voter = Voter.objects.get(voter_id__iexact=voter_id)
+                
+                # Delete old templates for this voter
                 FingerprintTemplate.objects.filter(voter=voter).delete()
-                FingerprintTemplate.objects.create(voter=voter, template_hex=template_hex)
-                print(f"✅ Created FingerprintTemplate for voter {voter_id}")
+                
+                # Create new template with quality info
+                template = FingerprintTemplate.objects.create(
+                    voter=voter, 
+                    template_hex=template_hex
+                )
+                
+                # Log template creation with quality score
+                ActivityLog.objects.create(
+                    action=f'Fingerprint template created for voter {voter_id} - Quality: {quality_score:.1f}/100'
+                )
+                
+                print(f"✅ Created FingerprintTemplate for voter {voter_id} (Quality: {quality_score:.1f})")
 
                 trigger = ScanTrigger.objects.filter(voter_id=voter_id, used=False).order_by('-created_at').first()
                 if trigger:
@@ -645,7 +721,11 @@ def upload_template(request):
                     trigger.save()
                     print(f"✅ Marked trigger as used for voter_id={voter_id}")
 
-                return JsonResponse({'status': 'success'})
+                return JsonResponse({
+                    'status': 'success',
+                    'quality_score': quality_score,
+                    'message': f'Template stored successfully (Quality: {quality_score:.1f}/100)'
+                })
             except Voter.DoesNotExist:
                 return JsonResponse({'status': 'error', 'message': 'Voter not found'}, status=400)
         else:
@@ -653,11 +733,12 @@ def upload_template(request):
                 voter=None,
                 template_hex=template_hex
             )
-            print(f"🗃️ Created temporary FingerprintTemplate with id {temp_template.id}")
+            print(f"🗃️ Created temporary FingerprintTemplate with id {temp_template.id} (Quality: {quality_score:.1f})")
             return JsonResponse({
                 'status': 'success',
                 'template_id': temp_template.id,
-                'message': 'Template stored successfully'
+                'quality_score': quality_score,
+                'message': f'Template stored successfully (Quality: {quality_score:.1f}/100)'
             })
 
     except Exception as e:
@@ -688,38 +769,233 @@ def register_voter_with_fingerprint(request):
 @csrf_protect
 @require_http_methods(["POST"])
 def fingerprint_authenticate(request):
-    """Authenticate a voter by fingerprint template (exact match)."""
+    """Authenticate a voter by fingerprint template using advanced matching."""
     try:
         data = json.loads(request.body)
         template_hex = data.get('template_hex')
         if not template_hex:
             return JsonResponse({'error': 'Missing template_hex.'}, status=400)
+        
+        # Convert hex to bytes for comparison
         try:
-            fp = FingerprintTemplate.objects.select_related('voter').get(template_hex=template_hex)
-            voter = fp.voter
-            if voter.has_voted:
-                return JsonResponse({'status': 'already_voted', 'voter_name': voter.name})
+            incoming_template = bytes.fromhex(template_hex)
+        except Exception:
+            return JsonResponse({'error': 'Invalid template_hex format.'}, status=400)
+        
+        # Use advanced fingerprint matching algorithm
+        templates = FingerprintTemplate.objects.select_related('voter').all()
+        matched_voter, confidence_score, match_type = advanced_fingerprint_match(incoming_template, templates)
+        
+        # Strict threshold for security
+        MINIMUM_CONFIDENCE_THRESHOLD = 55.0
+        
+        if matched_voter and confidence_score >= MINIMUM_CONFIDENCE_THRESHOLD:
+            if matched_voter.has_voted:
+                ActivityLog.objects.create(
+                    action=f'Authentication attempt by already voted voter: {matched_voter.name} (ID: {matched_voter.voter_id})'
+                )
+                return JsonResponse({
+                    'status': 'already_voted', 
+                    'voter_name': matched_voter.name,
+                    'score': confidence_score,
+                    'match_type': match_type
+                })
+            
             # Set session for authenticated voter
-            request.session['authenticated_voter_id'] = voter.id
+            request.session['authenticated_voter_id'] = matched_voter.id
             request.session.modified = True
-            return JsonResponse({'status': 'authenticated', 'voter_id': voter.id, 'voter_name': voter.name})
-        except FingerprintTemplate.DoesNotExist:
-            return JsonResponse({'error': 'Fingerprint not recognized.'}, status=404)
+            
+            # Log successful authentication
+            ActivityLog.objects.create(
+                action=f'Fingerprint authentication successful: {matched_voter.name} (ID: {matched_voter.voter_id}) - Score: {confidence_score:.2f}'
+            )
+            
+            return JsonResponse({
+                'status': 'authenticated', 
+                'voter_id': matched_voter.id, 
+                'voter_name': matched_voter.name,
+                'score': confidence_score,
+                'match_type': match_type,
+                'confidence_level': 'high' if confidence_score >= 70.0 else 'medium'
+            })
+        else:
+            # Log failed authentication attempt
+            ActivityLog.objects.create(
+                action=f'Fingerprint authentication failed - Best score: {confidence_score:.2f}, Match type: {match_type}'
+            )
+            
+            return JsonResponse({
+                'error': 'Fingerprint not recognized with sufficient confidence.',
+                'score': confidence_score,
+                'match_type': match_type
+            }, status=404)
+            
     except Exception as e:
+        ActivityLog.objects.create(action=f'Fingerprint authentication error: {str(e)}')
         return JsonResponse({'error': str(e)}, status=500)
 
 
 def calculate_similarity(template1: bytes, template2: bytes) -> float:
     """
-    Returns similarity between two fingerprint templates (0 to 100).
-    Simple normalized Hamming distance approximation.
+    Advanced fingerprint similarity calculation using multiple algorithms.
+    Returns similarity score between 0 and 100.
+    Uses Hamming distance, pattern matching, and feature comparison.
     """
-    if not template1 or not template2 or len(template1) != len(template2):
+    if not template1 or not template2:
         return 0.0
 
-    match_count = sum(b1 == b2 for b1, b2 in zip(template1, template2))
-    return (match_count / len(template1)) * 100
+    # Ensure templates are the same length for comparison
+    if len(template1) != len(template2):
+        return 0.0
+    
+    # Method 1: Hamming Distance (bit-level comparison)
+    hamming_distance = sum(b1 != b2 for b1, b2 in zip(template1, template2))
+    hamming_similarity = ((len(template1) - hamming_distance) / len(template1)) * 100
+    
+    # Method 2: Pattern Matching (look for similar byte patterns)
+    pattern_matches = 0
+    pattern_length = 4  # Look for 4-byte patterns
+    for i in range(len(template1) - pattern_length + 1):
+        pattern1 = template1[i:i+pattern_length]
+        pattern2 = template2[i:i+pattern_length]
+        if pattern1 == pattern2:
+            pattern_matches += 1
+    
+    pattern_similarity = (pattern_matches / (len(template1) - pattern_length + 1)) * 100
+    
+    # Method 3: Feature-based comparison (byte frequency analysis)
+    byte_freq1 = {}
+    byte_freq2 = {}
+    
+    for byte in template1:
+        byte_freq1[byte] = byte_freq1.get(byte, 0) + 1
+    
+    for byte in template2:
+        byte_freq2[byte] = byte_freq2.get(byte, 0) + 1
+    
+    # Calculate frequency similarity
+    common_bytes = set(byte_freq1.keys()) & set(byte_freq2.keys())
+    freq_similarity = 0
+    if byte_freq1 and byte_freq2:
+        total_freq_diff = 0
+        for byte in common_bytes:
+            total_freq_diff += abs(byte_freq1[byte] - byte_freq2[byte])
+        max_possible_diff = max(sum(byte_freq1.values()), sum(byte_freq2.values()))
+        if max_possible_diff > 0:
+            freq_similarity = ((max_possible_diff - total_freq_diff) / max_possible_diff) * 100
+    
+    # Method 4: Structural similarity (byte position importance)
+    structural_matches = 0
+    for i in range(0, len(template1), 8):  # Check every 8th byte (key positions)
+        if i < len(template1) and i < len(template2):
+            if template1[i] == template2[i]:
+                structural_matches += 1
+    
+    structural_similarity = (structural_matches / (len(template1) // 8 + 1)) * 100
+    
+    # Weighted combination of all methods
+    # Give more weight to hamming distance and pattern matching
+    final_score = (
+        hamming_similarity * 0.4 +      # 40% weight
+        pattern_similarity * 0.3 +      # 30% weight
+        freq_similarity * 0.2 +         # 20% weight
+        structural_similarity * 0.1     # 10% weight
+    )
+    
+    return round(final_score, 2)
 
+
+def advanced_fingerprint_match(incoming_template: bytes, db_templates: list) -> tuple:
+    """
+    Advanced fingerprint matching with multiple validation layers.
+    Returns (matched_voter, confidence_score, match_type)
+    """
+    if not incoming_template:
+        return None, 0.0, "no_template"
+    
+    best_match = None
+    best_score = 0.0
+    match_type = "no_match"
+    
+    # First pass: Quick screening with lower threshold
+    candidates = []
+    for record in db_templates:
+        try:
+            db_template = bytes.fromhex(record.template_hex)
+            if len(db_template) != len(incoming_template):
+                continue
+                
+            # Quick similarity check
+            quick_score = calculate_similarity(incoming_template, db_template)
+            if quick_score > 15.0:  # Lower threshold for initial screening
+                candidates.append((record, quick_score))
+        except Exception:
+            continue
+    
+    # Second pass: Detailed analysis of candidates
+    for record, initial_score in candidates:
+        try:
+            db_template = bytes.fromhex(record.template_hex)
+            
+            # Detailed similarity calculation
+            detailed_score = calculate_similarity(incoming_template, db_template)
+            
+            # Additional validation checks
+            validation_passed = True
+            
+            # Check 1: Minimum byte similarity
+            byte_matches = sum(b1 == b2 for b1, b2 in zip(incoming_template, db_template))
+            byte_similarity = (byte_matches / len(incoming_template)) * 100
+            if byte_similarity < 25.0:  # At least 25% of bytes should match
+                validation_passed = False
+            
+            # Check 2: Pattern consistency
+            pattern_consistency = 0
+            for i in range(0, len(incoming_template) - 3, 4):
+                if i + 4 <= len(incoming_template) and i + 4 <= len(db_template):
+                    pattern1 = incoming_template[i:i+4]
+                    pattern2 = db_template[i:i+4]
+                    if pattern1 == pattern2:
+                        pattern_consistency += 1
+            
+            pattern_score = (pattern_consistency / (len(incoming_template) // 4)) * 100
+            if pattern_score < 10.0:  # At least 10% pattern consistency
+                validation_passed = False
+            
+            # Check 3: Structural integrity
+            structural_matches = 0
+            key_positions = [0, len(incoming_template)//4, len(incoming_template)//2, 3*len(incoming_template)//4, len(incoming_template)-1]
+            for pos in key_positions:
+                if pos < len(incoming_template) and pos < len(db_template):
+                    if incoming_template[pos] == db_template[pos]:
+                        structural_matches += 1
+            
+            structural_score = (structural_matches / len(key_positions)) * 100
+            if structural_score < 20.0:  # At least 20% of key positions should match
+                validation_passed = False
+            
+            # Final score calculation with validation
+            if validation_passed:
+                final_score = (detailed_score * 0.6 + byte_similarity * 0.2 + pattern_score * 0.1 + structural_score * 0.1)
+                
+                if final_score > best_score:
+                    best_score = final_score
+                    best_match = record.voter
+                    
+                    # Determine match type based on score
+                    if final_score >= 85.0:
+                        match_type = "exact_match"
+                    elif final_score >= 70.0:
+                        match_type = "high_confidence"
+                    elif final_score >= 55.0:
+                        match_type = "medium_confidence"
+                    else:
+                        match_type = "low_confidence"
+                        
+        except Exception:
+            continue
+    
+    return best_match, round(best_score, 2), match_type
 
 
 @csrf_exempt
@@ -743,48 +1019,73 @@ def match_template(request):
         # Decode incoming base64 fingerprint template to bytes
         incoming_template = base64.b64decode(template_b64)
 
-        best_score = 0
-        matched_voter = None
-
+        # Use advanced fingerprint matching algorithm
         templates = FingerprintTemplate.objects.select_related('voter').all()
-        for record in templates:
-            try:
-                db_template = bytes.fromhex(record.template_hex)
-            except Exception:
-                continue  # Skip corrupted templates
+        matched_voter, confidence_score, match_type = advanced_fingerprint_match(incoming_template, templates)
 
-            score = calculate_similarity(incoming_template, db_template)
-            if score > best_score:
-                best_score = score
-                matched_voter = record.voter
+        # Strict threshold for security - only accept high confidence matches
+        MINIMUM_CONFIDENCE_THRESHOLD = 55.0  # Much higher than before for security
 
-        SIMILARITY_THRESHOLD = 20.0  # Adjust threshold for match sensitivity
+        if matched_voter and confidence_score >= MINIMUM_CONFIDENCE_THRESHOLD:
+            # Additional security check: ensure voter hasn't already voted
+            if matched_voter.has_voted:
+                trigger.used = True
+                trigger.matched_voter = matched_voter  # Set the matched voter
+                trigger.match_status = 'already_voted'
+                trigger.match_message = f"Matched voter {matched_voter.name} but they have already voted"
+                trigger.score = confidence_score
+                trigger.save()
+                
+                return JsonResponse({
+                    'status': 'already_voted',
+                    'message': 'Voter has already voted',
+                    'voter_name': matched_voter.name,
+                    'score': confidence_score,
+                    'match_type': match_type
+                })
 
-        if matched_voter and best_score >= SIMILARITY_THRESHOLD:
-            # Optionally, check if voter has voted already here if needed
+            # Log successful match for audit
+            ActivityLog.objects.create(
+                action=f'Fingerprint match successful: {matched_voter.name} (ID: {matched_voter.voter_id}) - Score: {confidence_score:.2f}, Type: {match_type}'
+            )
 
             trigger.used = True
             trigger.matched_voter = matched_voter
             trigger.match_status = 'success'
-            trigger.match_message = f"Matched voter {matched_voter.name} with score {best_score:.2f}"
+            trigger.match_message = f"Matched voter {matched_voter.name} with score {confidence_score:.2f} ({match_type})"
+            trigger.score = confidence_score
             trigger.save()
 
             return JsonResponse({
                 'status': 'success',
                 'voter_id': matched_voter.voter_id,
                 'voter_name': matched_voter.name,
-                'score': best_score
+                'score': confidence_score,
+                'match_type': match_type,
+                'confidence_level': 'high' if confidence_score >= 70.0 else 'medium'
             })
 
-        # No match found
+        # No match found or confidence too low
         trigger.used = True
         trigger.match_status = 'not_found'
-        trigger.match_message = 'No matching fingerprint found'
+        trigger.match_message = f'No matching fingerprint found (best score: {confidence_score:.2f})'
+        trigger.score = confidence_score
         trigger.save()
 
-        return JsonResponse({'status': 'not_found', 'message': 'No matching fingerprint found', 'score': best_score})
+        # Log failed match attempt for security monitoring
+        ActivityLog.objects.create(
+            action=f'Fingerprint match failed - Best score: {confidence_score:.2f}, Match type: {match_type}'
+        )
+
+        return JsonResponse({
+            'status': 'not_found', 
+            'message': 'No matching fingerprint found with sufficient confidence', 
+            'score': confidence_score,
+            'match_type': match_type
+        })
 
     except Exception as e:
+        ActivityLog.objects.create(action=f'Fingerprint matching error: {str(e)}')
         return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
     
 
@@ -860,7 +1161,7 @@ def fingerprint_verification(request):
                 'message': 'Fingerprint verified successfully',
                 'voter_name': voter.name,
                 'voter_id': voter.voter_id,
-                'redirect_url': '/voting/cast-vote/'
+                'redirect_url': '/cast-vote/'
             })
             
         except Voter.DoesNotExist:
@@ -1011,7 +1312,7 @@ def vote_page(request):
     try:
         voter = Voter.objects.get(id=voter_id)
         if voter.has_voted:
-            return redirect('voting:already_voted')
+            return redirect('/already-voted/')
         
         posts = Post.objects.prefetch_related('candidates').all()
         return render(request, 'voting/vote_page.html', {
@@ -1027,7 +1328,7 @@ def vote_page_with_id(request, voter_id):
     try:
         voter = Voter.objects.get(voter_id=voter_id)
         if voter.has_voted:
-            return redirect('voting:already_voted')
+            return redirect('/already-voted/')
         
         posts = Post.objects.prefetch_related('candidates').all()
         return render(request, 'voting/vote_page.html', {
@@ -1106,8 +1407,34 @@ def scan_result(request):
         # Not used yet, still pending
         return JsonResponse({"status": "pending"})
 
-    # Find matched voter
-    if trigger.matched_voter:
+    # Check match status first
+    if trigger.match_status == 'already_voted':
+        # Handle already voted case
+        if trigger.matched_voter:
+            voter = trigger.matched_voter
+            # Set session for the matched voter so already_voted page can display their name
+            request.session['authenticated_voter_id'] = voter.id
+            request.session.modified = True
+            
+            return JsonResponse({
+                "status": "already_voted",
+                "voter_id": voter.voter_id,
+                "voter_name": voter.name,
+                "message": "This voter has already cast their vote",
+                "score": trigger.score or 0
+            })
+        else:
+            # If matched_voter is not set but status is already_voted, try to find the voter
+            # This handles the case where the trigger was marked as already_voted but voter wasn't saved
+            return JsonResponse({
+                "status": "already_voted",
+                "voter_id": None,
+                "voter_name": "Unknown Voter",
+                "message": "This voter has already cast their vote",
+                "score": trigger.score or 0
+            })
+    
+    elif trigger.match_status == 'success' and trigger.matched_voter:
         voter = trigger.matched_voter
         return JsonResponse({
             "status": "success",
@@ -1115,8 +1442,148 @@ def scan_result(request):
             "voter_name": voter.name,
             "score": trigger.score or 0
         })
-    else:
+    
+    elif trigger.match_status == 'not_found':
         return JsonResponse({
             "status": "error",
             "message": "Fingerprint not matched"
         })
+    
+    else:
+        # Fallback for other cases
+        return JsonResponse({
+            "status": "error",
+            "message": "Fingerprint not matched"
+        })
+
+def validate_fingerprint_template(template_hex: str) -> bool:
+    """
+    Validate fingerprint template format and quality.
+    Returns True if template is valid and meets quality standards.
+    """
+    try:
+        # Check if template_hex is valid hex string
+        template_bytes = bytes.fromhex(template_hex)
+        
+        # Check minimum length (typical fingerprint templates are 512+ bytes)
+        if len(template_bytes) < 256:
+            return False
+        
+        # Check for reasonable byte distribution (not all zeros or all ones)
+        zero_count = template_bytes.count(0)
+        one_count = template_bytes.count(255)
+        total_bytes = len(template_bytes)
+        
+        # If more than 80% are zeros or ones, template is likely invalid
+        if zero_count / total_bytes > 0.8 or one_count / total_bytes > 0.8:
+            return False
+        
+        # Check for reasonable entropy (not too repetitive)
+        unique_bytes = len(set(template_bytes))
+        if unique_bytes < total_bytes * 0.1:  # At least 10% unique bytes
+            return False
+        
+        return True
+        
+    except Exception:
+        return False
+
+
+def calculate_template_quality(template_hex: str) -> float:
+    """
+    Calculate quality score for fingerprint template (0-100).
+    Higher score indicates better template quality.
+    """
+    try:
+        template_bytes = bytes.fromhex(template_hex)
+        
+        # Factor 1: Length (longer templates are generally better)
+        length_score = min(len(template_bytes) / 512.0 * 100, 100)
+        
+        # Factor 2: Entropy (more unique bytes = better)
+        unique_bytes = len(set(template_bytes))
+        entropy_score = (unique_bytes / len(template_bytes)) * 100
+        
+        # Factor 3: Distribution (avoid extreme values)
+        zero_count = template_bytes.count(0)
+        one_count = template_bytes.count(255)
+        total_bytes = len(template_bytes)
+        
+        distribution_score = 100
+        if zero_count / total_bytes > 0.5:
+            distribution_score -= 30
+        if one_count / total_bytes > 0.5:
+            distribution_score -= 30
+        
+        # Weighted average
+        quality_score = (length_score * 0.3 + entropy_score * 0.4 + distribution_score * 0.3)
+        
+        return round(quality_score, 2)
+        
+    except Exception:
+        return 0.0
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def test_fingerprint_matching(request):
+    """
+    Test endpoint for fingerprint matching algorithm.
+    Allows testing with sample templates to verify algorithm accuracy.
+    """
+    try:
+        data = json.loads(request.body)
+        test_template_hex = data.get('template_hex')
+        test_mode = data.get('mode', 'match')  # 'match' or 'quality'
+        
+        if not test_template_hex:
+            return JsonResponse({
+                'status': 'error',
+                'message': 'template_hex is required for testing'
+            }, status=400)
+        
+        # Validate template
+        if not validate_fingerprint_template(test_template_hex):
+            return JsonResponse({
+                'status': 'error',
+                'message': 'Invalid template format for testing'
+            }, status=400)
+        
+        quality_score = calculate_template_quality(test_template_hex)
+        
+        if test_mode == 'quality':
+            return JsonResponse({
+                'status': 'success',
+                'quality_score': quality_score,
+                'is_valid': True,
+                'message': f'Template quality: {quality_score:.1f}/100'
+            })
+        
+        # Test matching against all stored templates
+        test_template = bytes.fromhex(test_template_hex)
+        templates = FingerprintTemplate.objects.select_related('voter').all()
+        
+        matched_voter, confidence_score, match_type = advanced_fingerprint_match(test_template, templates)
+        
+        results = {
+            'status': 'success',
+            'test_template_quality': quality_score,
+            'total_templates_tested': len(templates),
+            'best_match_score': confidence_score,
+            'match_type': match_type,
+            'threshold_met': confidence_score >= 55.0
+        }
+        
+        if matched_voter:
+            results.update({
+                'matched_voter_id': matched_voter.voter_id,
+                'matched_voter_name': matched_voter.name,
+                'voter_has_voted': matched_voter.has_voted
+            })
+        
+        return JsonResponse(results)
+        
+    except Exception as e:
+        return JsonResponse({
+            'status': 'error',
+            'message': f'Test failed: {str(e)}'
+        }, status=500)

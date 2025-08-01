@@ -26,7 +26,7 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Poll the fingerprint API
     function pollFingerprint() {
-        fetch('/voting/api/get-latest-fingerprint/', {
+        fetch('/api/get-latest-fingerprint/', {
             method: 'GET',
             headers: {
                 'Content-Type': 'application/json',
